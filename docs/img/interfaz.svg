@@ -1,0 +1,145 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1160 700" width="1160" height="700" role="img" aria-label="Esquema de la interfaz de Alerta España">
+  <defs>
+    <linearGradient id="mapaBg" x1="0" y1="0" x2="1" y2="1">
+      <stop offset="0%" stop-color="#0a1020"/>
+      <stop offset="100%" stop-color="#0e1729"/>
+    </linearGradient>
+    <radialGradient id="eco" cx="50%" cy="50%" r="50%">
+      <stop offset="0%" stop-color="#ef4444" stop-opacity="0.75"/>
+      <stop offset="40%" stop-color="#f59e0b" stop-opacity="0.5"/>
+      <stop offset="70%" stop-color="#22c55e" stop-opacity="0.32"/>
+      <stop offset="100%" stop-color="#38bdf8" stop-opacity="0"/>
+    </radialGradient>
+    <style>
+      .et { font-family: system-ui, -apple-system, "Segoe UI", Roboto, sans-serif; }
+      .lbl { font-size: 12.5px; fill: #fbbf24; font-weight: 650; }
+      .sub { font-size: 11px; fill: #94a3b8; }
+      .lin { stroke: #fbbf24; stroke-width: 1.2; stroke-dasharray: 3 3; fill: none; }
+      .ui { font-size: 12.5px; fill: #e2e8f0; }
+      .ui-t { font-size: 11px; fill: #94a3b8; }
+    </style>
+  </defs>
+
+  <rect width="1160" height="700" fill="#070b14"/>
+
+  <!-- Lienzo de la app: x 210..890, y 92..572 -->
+  <rect x="210" y="92" width="680" height="480" rx="12" fill="url(#mapaBg)" stroke="#1e293b"/>
+
+  <!-- Península esquemática -->
+  <path d="M300 250 Q342 214 414 221 Q496 209 564 227 Q622 221 663 245 Q694 272 690 317 Q678 376 631 417 Q563 453 482 456 Q400 453 346 421 Q303 385 296 331 Z"
+        fill="#131f36" stroke="#26364f" stroke-width="1.5"/>
+  <ellipse cx="726" cy="374" rx="15" ry="9" fill="#131f36" stroke="#26364f"/>
+  <ellipse cx="754" cy="357" rx="9" ry="6" fill="#131f36" stroke="#26364f"/>
+
+  <!-- Eco de radar sobre el Mediterráneo -->
+  <ellipse cx="640" cy="342" rx="74" ry="57" fill="url(#eco)"/>
+
+  <!-- Zona de aviso rojo -->
+  <rect x="602" y="310" width="68" height="62" rx="4" fill="#ef4444" fill-opacity="0.2" stroke="#ef4444" stroke-width="1.5"/>
+
+  <!-- Estaciones -->
+  <g>
+    <circle cx="634" cy="338" r="6" fill="#ef4444"/>
+    <circle cx="655" cy="353" r="5" fill="#f97316"/>
+    <circle cx="618" cy="357" r="4.5" fill="#eab308"/>
+    <circle cx="512" cy="296" r="3" fill="#475569"/>
+    <circle cx="424" cy="344" r="3" fill="#475569"/>
+    <circle cx="376" cy="298" r="3" fill="#475569"/>
+    <circle cx="560" cy="400" r="3.5" fill="#0284c7"/>
+    <circle cx="472" cy="258" r="3" fill="#475569"/>
+    <circle cx="598" cy="253" r="3" fill="#475569"/>
+    <circle cx="350" cy="368" r="3" fill="#475569"/>
+  </g>
+
+  <!-- Punto del usuario -->
+  <circle cx="622" cy="371" r="7" fill="#22c55e" stroke="#fff" stroke-width="2"/>
+
+  <!-- ===== Barra superior ===== -->
+  <g transform="translate(210 92)">
+    <rect width="680" height="52" rx="12" fill="#0b1220" fill-opacity="0.94"/>
+    <circle cx="30" cy="26" r="13" fill="#ef4444"/>
+    <text class="et ui" x="54" y="22" font-weight="650" font-size="14">Alerta España</text>
+    <text class="et" x="54" y="38" font-size="10.5" fill="#fdba74" font-weight="600">3 avisos activos en España</text>
+    <rect x="432" y="12" width="122" height="28" rx="14" fill="#dc2626"/>
+    <text class="et" x="493" y="30" text-anchor="middle" font-size="12" fill="#fff" font-weight="650">📍 Vigilar mi zona</text>
+    <circle cx="576" cy="26" r="14" fill="#1e293b" stroke="#334155"/>
+    <text class="et" x="576" y="31" text-anchor="middle" font-size="13" fill="#cbd5e1">⟳</text>
+    <rect x="600" y="12" width="62" height="28" rx="14" fill="#1e293b" stroke="#334155"/>
+    <text class="et ui-t" x="631" y="30" text-anchor="middle">22:06</text>
+  </g>
+
+  <!-- ===== Panel de capas ===== -->
+  <g transform="translate(712 158)">
+    <rect width="162" height="30" rx="15" fill="#0f172a" fill-opacity="0.96" stroke="#334155"/>
+    <text class="et ui" x="81" y="19.5" text-anchor="middle">☰  Capas</text>
+    <g transform="translate(0 40)">
+      <rect width="162" height="196" rx="12" fill="#0f172a" fill-opacity="0.96" stroke="#334155"/>
+      <text class="et" x="14" y="22" font-size="9" fill="#94a3b8" font-weight="650" letter-spacing="1">METEOROLOGÍA</text>
+      <circle cx="19" cy="40" r="5" fill="#38bdf8"/><text class="et ui" x="32" y="44">Radar de lluvia</text>
+      <circle cx="19" cy="62" r="5" fill="#f97316"/><text class="et ui" x="32" y="66">Avisos AEMET</text>
+      <circle cx="19" cy="84" r="5" fill="#0ea5e9"/><text class="et ui" x="32" y="88">Estaciones</text>
+      <text class="et" x="14" y="112" font-size="9" fill="#94a3b8" font-weight="650" letter-spacing="1">HIDROLOGÍA · SAIH</text>
+      <circle cx="19" cy="130" r="5" fill="none" stroke="#22d3ee" stroke-width="2"/><text class="et ui" x="32" y="134">Ríos y embalses</text>
+      <text class="et" x="14" y="158" font-size="9" fill="#94a3b8" font-weight="650" letter-spacing="1">GEOFÍSICA</text>
+      <circle cx="19" cy="176" r="5" fill="none" stroke="#a78bfa" stroke-width="2"/><text class="et ui" x="32" y="180">Terremotos</text>
+    </g>
+  </g>
+
+  <!-- ===== Barra del radar ===== -->
+  <g transform="translate(226 502)">
+    <rect width="648" height="54" rx="12" fill="#0f172a" fill-opacity="0.96" stroke="#334155"/>
+    <circle cx="34" cy="27" r="17" fill="#0ea5e9"/>
+    <path d="M29 20l12 7-12 7z" fill="#04121f"/>
+    <rect x="64" y="24" width="484" height="5" rx="2.5" fill="#334155"/>
+    <rect x="64" y="24" width="318" height="5" rx="2.5" fill="#38bdf8"/>
+    <circle cx="382" cy="26.5" r="8" fill="#fff"/>
+    <rect x="438" y="19" width="2.5" height="16" rx="1" fill="#fbbf24"/>
+    <text class="et" x="580" y="24" font-size="15" fill="#e2e8f0" font-weight="650">21:40</text>
+    <text class="et" x="580" y="38" font-size="9" fill="#94a3b8" letter-spacing="0.8">OBSERVADO</text>
+  </g>
+
+  <!-- ===== Anotaciones (todas en los márgenes, sin pisar la interfaz) ===== -->
+  <g class="et">
+    <!-- Arriba: botón de vigilancia -->
+    <path class="lin" d="M703 118 V60 H660"/>
+    <text class="lbl" x="654" y="52" text-anchor="end">Activa la vigilancia de tu zona</text>
+    <text class="sub" x="654" y="68" text-anchor="end">pide ubicación y notificaciones</text>
+
+    <!-- Izquierda: avisos activos -->
+    <path class="lin" d="M208 130 H150"/>
+    <text class="lbl" x="144" y="126" text-anchor="end">Avisos activos</text>
+    <text class="sub" x="144" y="142" text-anchor="end">de un vistazo</text>
+
+    <!-- Derecha: panel -->
+    <path class="lin" d="M876 173 H920"/>
+    <text class="lbl" x="926" y="169">Enciende y</text>
+    <text class="lbl" x="926" y="185">apaga capas</text>
+
+    <!-- Dentro del mapa: estaciones (hay hueco oscuro bajo la península) -->
+    <path class="lin" d="M612 362 Q560 430 500 452"/>
+    <text class="lbl" x="494" y="450" text-anchor="end">Estaciones por</text>
+    <text class="sub" x="494" y="466" text-anchor="end">intensidad de lluvia</text>
+
+    <!-- Derecha: posición (la línea pasa por debajo del panel) -->
+    <path class="lin" d="M629 374 Q700 430 900 430"/>
+    <text class="lbl" x="906" y="426">Tu posición</text>
+    <text class="sub" x="906" y="442">nunca sale del móvil</text>
+
+    <!-- Izquierda: radar -->
+    <path class="lin" d="M584 330 Q420 240 150 240"/>
+    <text class="lbl" x="144" y="236" text-anchor="end">Radar animado</text>
+    <text class="sub" x="144" y="252" text-anchor="end">ves si viene hacia ti</text>
+
+    <!-- Izquierda: play -->
+    <path class="lin" d="M258 529 H150"/>
+    <text class="lbl" x="144" y="525" text-anchor="end">▶ reproduce</text>
+    <text class="sub" x="144" y="541" text-anchor="end">las últimas 2 horas</text>
+
+    <!-- Abajo: marca de predicción -->
+    <path class="lin" d="M665 540 V614 H720"/>
+    <text class="lbl" x="726" y="610">La marca amarilla separa</text>
+    <text class="sub" x="726" y="626">lo observado de la predicción</text>
+  </g>
+
+  <text class="et" x="580" y="672" text-anchor="middle" font-size="11" fill="#64748b">Esquema ilustrativo de la interfaz</text>
+</svg>

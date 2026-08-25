@@ -1,0 +1,48 @@
+name: 💡 Proponer una mejora
+description: Una idea para que la app salve más vidas
+title: "[IDEA] "
+labels: ["mejora"]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Toda idea es bienvenida. Piensa sobre todo en si ayuda a que alguien
+        reaccione **antes** ante un peligro.
+
+  - type: textarea
+    id: problema
+    attributes:
+      label: ¿Qué problema resuelve?
+      description: Antes que la solución, cuéntanos la situación real.
+      placeholder: "Cuando voy conduciendo no puedo mirar el móvil, así que no me entero del aviso..."
+    validations:
+      required: true
+
+  - type: textarea
+    id: idea
+    attributes:
+      label: ¿Qué propones?
+    validations:
+      required: true
+
+  - type: dropdown
+    id: area
+    attributes:
+      label: ¿Qué parte afecta?
+      options:
+        - Lluvia / riadas / DANA
+        - Ríos y embalses (SAIH)
+        - Viento
+        - Terremotos
+        - Incendios
+        - Interfaz y mapa
+        - Alertas y notificaciones
+        - Otra cosa
+    validations:
+      required: true
+
+  - type: textarea
+    id: fuente
+    attributes:
+      label: ¿Conoces alguna fuente de datos para esto?
+      description: Si sabes de una API, un organismo o un portal que publique estos datos, dínoslo. Es la parte más difícil.

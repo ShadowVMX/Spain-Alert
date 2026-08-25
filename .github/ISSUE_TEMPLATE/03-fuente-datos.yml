@@ -1,0 +1,62 @@
+name: 🌊 Aportar una fuente de datos
+description: Conoces sensores o datos oficiales que deberíamos integrar
+title: "[DATOS] "
+labels: ["fuente-de-datos"]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Esto es oro. En España los datos de emergencias están repartidos entre
+        AEMET, las confederaciones hidrográficas, el IGN, las CCAA y los
+        ayuntamientos, sin un catálogo único. Si conoces una fuente, cuéntanosla
+        aunque no sepas si tiene API.
+
+  - type: input
+    id: organismo
+    attributes:
+      label: ¿Quién publica los datos?
+      placeholder: "Confederación Hidrográfica del Júcar"
+    validations:
+      required: true
+
+  - type: input
+    id: url
+    attributes:
+      label: Enlace
+      placeholder: "https://..."
+    validations:
+      required: true
+
+  - type: textarea
+    id: que-datos
+    attributes:
+      label: ¿Qué datos ofrece?
+      placeholder: "Nivel y caudal de los ríos de la cuenca, actualizado cada 5 minutos"
+    validations:
+      required: true
+
+  - type: dropdown
+    id: formato
+    attributes:
+      label: ¿Sabes en qué formato están?
+      options:
+        - No lo sé
+        - API REST (JSON)
+        - WMS / WFS (mapas)
+        - CSV o Excel
+        - Solo una página web (habría que hacer scraping)
+        - Otro
+    validations:
+      required: true
+
+  - type: dropdown
+    id: cobertura
+    attributes:
+      label: ¿Qué zona cubre?
+      options:
+        - Toda España
+        - Una comunidad autónoma
+        - Una cuenca hidrográfica
+        - Una provincia o municipio
+    validations:
+      required: true

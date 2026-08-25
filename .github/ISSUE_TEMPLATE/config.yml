@@ -1,0 +1,8 @@
+blank_issues_enabled: true
+contact_links:
+  - name: 🆘 Estoy en una emergencia AHORA
+    url: https://www.aemet.es/es/eltiempo/prediccion/avisos
+    about: "Esto es un proyecto de software, no un servicio de emergencias. Llama al 112 y consulta los avisos oficiales de AEMET."
+  - name: 💬 Preguntas y conversación
+    url: https://github.com/ShadowVMX/Spain-Alert/discussions
+    about: "Para dudas generales o para debatir ideas antes de abrir una propuesta formal."

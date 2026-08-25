@@ -1,0 +1,87 @@
+name: 🐛 Reportar un fallo
+description: Algo no funciona como debería
+title: "[BUG] "
+labels: ["bug"]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Gracias por reportarlo. Cuanto más concreto seas, antes lo arreglamos.
+
+        **⚠️ Si el fallo es que la app NO avisó de un peligro real, marca la casilla
+        de seguridad al final: eso tiene prioridad absoluta sobre todo lo demás.**
+
+  - type: textarea
+    id: que-pasa
+    attributes:
+      label: ¿Qué ha pasado?
+      description: Cuéntalo con tus palabras, no hace falta ser técnico.
+      placeholder: "Abrí la app en Valencia y el radar aparecía en blanco aunque estaba lloviendo..."
+    validations:
+      required: true
+
+  - type: textarea
+    id: esperado
+    attributes:
+      label: ¿Qué esperabas que pasara?
+    validations:
+      required: true
+
+  - type: textarea
+    id: pasos
+    attributes:
+      label: ¿Cómo se reproduce?
+      description: Los pasos para que nos pase a nosotros también.
+      placeholder: |
+        1. Abrir la app
+        2. Pulsar "Vigilar mi zona"
+        3. ...
+    validations:
+      required: true
+
+  - type: input
+    id: cuando
+    attributes:
+      label: ¿Cuándo ocurrió?
+      description: Fecha y hora aproximadas. Importa porque los datos meteorológicos cambian cada pocos minutos.
+      placeholder: "29/10/2026 sobre las 18:30"
+
+  - type: input
+    id: donde
+    attributes:
+      label: ¿Dónde estabas?
+      description: Provincia o municipio basta. No hace falta tu ubicación exacta.
+      placeholder: "Paiporta (Valencia)"
+
+  - type: dropdown
+    id: dispositivo
+    attributes:
+      label: ¿Desde dónde lo usabas?
+      options:
+        - Móvil Android
+        - Móvil iPhone
+        - Ordenador
+        - Tablet
+        - Otro
+    validations:
+      required: true
+
+  - type: input
+    id: navegador
+    attributes:
+      label: Navegador
+      placeholder: "Chrome, Safari, Firefox..."
+
+  - type: textarea
+    id: capturas
+    attributes:
+      label: Capturas de pantalla
+      description: Si puedes, arrastra aquí una captura. Ayuda muchísimo.
+
+  - type: checkboxes
+    id: seguridad
+    attributes:
+      label: Seguridad
+      options:
+        - label: "⚠️ Este fallo hizo que la app NO avisara de un peligro real, o avisara de algo que no existía"
+          required: false
