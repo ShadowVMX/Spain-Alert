@@ -105,85 +105,76 @@ interface AemetObservacion {
 
 const msToKmh = (v: number | undefined) => (v === undefined ? null : Math.round(v * 3.6 * 10) / 10);
 
-// Máximo de estaciones a las que se les pide histórico por petición, para no agotar
-// el límite de peticiones/minuto de la API gratuita de AEMET (solo interesa el
-// detalle donde ya está lloviendo fuerte, no en las ~800 estaciones sin lluvia).
-const MAX_HISTORY_LOOKUPS = 40;
-const HISTORY_CANDIDATE_MM = 2;
+// AEMET no devuelve "la última lectura de cada estación": devuelve TODAS las
+// lecturas de las últimas 24 horas, así que llegan ~10.000 registros de unas 800
+// estaciones. Hay que quedarse con la más reciente de cada una.
+//
+// Esto no es solo cuestión de no repetir puntos en el mapa: mezclar lecturas de
+// distintas horas haría que una estación que registró lluvia torrencial esta
+// mañana siguiera disparando aviso de riada por la noche. Falsas alarmas
+// garantizadas, y con ellas el que la gente deje de hacer caso a los avisos.
+const TRES_HORAS_MS = 3 * 60 * 60 * 1000;
 
-interface StationRainDetail {
-  sum3h: number;
+interface HistorialEstacion {
+  actual: AemetObservacion;
+  lluvia3h: number | null;
   tendencia: import("./rain.js").RainTrend | null;
 }
 
-async function fetchStationRainDetail(idema: string): Promise<StationRainDetail | null> {
-  try {
-    const { raw } = await fetchAemet(`/observacion/convencional/datos/estacion/${idema}`);
-    const historial = JSON.parse(raw.toString("utf-8")) as AemetObservacion[];
-    const ordenado = historial
-      .filter((h) => h.fint)
-      .sort((a, b) => new Date(a.fint).getTime() - new Date(b.fint).getTime());
-    if (ordenado.length === 0) return null;
-
-    const ultimoInstante = new Date(ordenado[ordenado.length - 1].fint).getTime();
-    const enUltimas3h = ordenado.filter((h) => ultimoInstante - new Date(h.fint).getTime() <= 3 * 60 * 60 * 1000);
-    const sum3h = Math.round(enUltimas3h.reduce((acc, h) => acc + (h.prec ?? 0), 0) * 10) / 10;
-
-    let tendencia: import("./rain.js").RainTrend | null = null;
-    if (ordenado.length >= 2) {
-      const ultima = ordenado[ordenado.length - 1].prec ?? 0;
-      const anterior = ordenado[ordenado.length - 2].prec ?? 0;
-      tendencia = classifyTrend(ultima, anterior);
-    }
-    return { sum3h, tendencia };
-  } catch {
-    return null; // una estación sin histórico disponible no debe tumbar el resto
+/** Agrupa las observaciones por estación y resume el estado actual de cada una. */
+function resumirPorEstacion(observaciones: AemetObservacion[]): HistorialEstacion[] {
+  const porEstacion = new Map<string, AemetObservacion[]>();
+  for (const o of observaciones) {
+    if (typeof o.lat !== "number" || typeof o.lon !== "number" || !o.fint) continue;
+    const lista = porEstacion.get(o.idema);
+    if (lista) lista.push(o);
+    else porEstacion.set(o.idema, [o]);
   }
+
+  const resumen: HistorialEstacion[] = [];
+  for (const lecturas of porEstacion.values()) {
+    lecturas.sort((a, b) => new Date(a.fint).getTime() - new Date(b.fint).getTime());
+    const actual = lecturas[lecturas.length - 1];
+    const instanteActual = new Date(actual.fint).getTime();
+
+    // El acumulado de 3 h sale del mismo payload, sin pedir nada más a AEMET.
+    const ultimas3h = lecturas.filter((l) => instanteActual - new Date(l.fint).getTime() <= TRES_HORAS_MS);
+    const lluvia3h = ultimas3h.length > 0 ? Math.round(ultimas3h.reduce((acc, l) => acc + (l.prec ?? 0), 0) * 10) / 10 : null;
+
+    const anterior = lecturas.length >= 2 ? lecturas[lecturas.length - 2] : null;
+    const tendencia = anterior ? classifyTrend(actual.prec ?? 0, anterior.prec ?? 0) : null;
+
+    resumen.push({ actual, lluvia3h, tendencia });
+  }
+  return resumen;
 }
 
 export async function getWeatherStations(): Promise<GeoFeatureCollection<WeatherStationProperties>> {
   const { raw } = await fetchAemet("/observacion/convencional/todas");
   const observaciones = JSON.parse(raw.toString("utf-8")) as AemetObservacion[];
+  const estaciones = resumirPorEstacion(observaciones);
 
-  const candidatas = observaciones
-    .filter((o) => (o.prec ?? 0) >= HISTORY_CANDIDATE_MM)
-    .sort((a, b) => (b.prec ?? 0) - (a.prec ?? 0))
-    .slice(0, MAX_HISTORY_LOOKUPS)
-    .map((o) => o.idema);
+  console.log(`   ↳ ${observaciones.length} lecturas de AEMET resumidas en ${estaciones.length} estaciones`);
 
-  const detalles = new Map<string, StationRainDetail>();
-  if (candidatas.length > 0) {
-    const resultados = await Promise.allSettled(candidatas.map((idema) => fetchStationRainDetail(idema)));
-    candidatas.forEach((idema, idx) => {
-      const r = resultados[idx];
-      if (r.status === "fulfilled" && r.value) detalles.set(idema, r.value);
-    });
-  }
-
-  const features: GeoFeature<WeatherStationProperties>[] = observaciones
-    .filter((o) => typeof o.lat === "number" && typeof o.lon === "number")
-    .map((o) => {
-      const detalle = detalles.get(o.idema);
-      return {
-        type: "Feature",
-        geometry: { type: "Point", coordinates: [o.lon as number, o.lat as number] },
-        properties: {
-          id: o.idema,
-          nombre: o.ubi ?? o.idema,
-          provincia: o.prov ?? null,
-          fechaHora: o.fint,
-          precipitacion1h_mm: o.prec ?? null,
-          precipitacionAcumulada_mm: o.prec ?? null,
-          intensidadLluvia: classifyRain(o.prec ?? 0),
-          lluvia3h_mm: detalle?.sum3h ?? null,
-          tendenciaLluvia: detalle?.tendencia ?? null,
-          vientoVelocidad_kmh: msToKmh(o.vv),
-          vientoDireccion_grados: o.dv ?? null,
-          vientoRacha_kmh: msToKmh(o.vmax),
-          temperatura_c: o.ta ?? null,
-        },
-      };
-    });
+  const features: GeoFeature<WeatherStationProperties>[] = estaciones.map(({ actual, lluvia3h, tendencia }) => ({
+    type: "Feature",
+    geometry: { type: "Point", coordinates: [actual.lon as number, actual.lat as number] },
+    properties: {
+      id: actual.idema,
+      nombre: actual.ubi ?? actual.idema,
+      provincia: actual.prov ?? null,
+      fechaHora: actual.fint,
+      precipitacion1h_mm: actual.prec ?? null,
+      precipitacionAcumulada_mm: actual.prec ?? null,
+      intensidadLluvia: classifyRain(actual.prec ?? 0),
+      lluvia3h_mm: lluvia3h,
+      tendenciaLluvia: tendencia,
+      vientoVelocidad_kmh: msToKmh(actual.vv),
+      vientoDireccion_grados: actual.dv ?? null,
+      vientoRacha_kmh: msToKmh(actual.vmax),
+      temperatura_c: actual.ta ?? null,
+    },
+  }));
 
   return { type: "FeatureCollection", features, actualizado: new Date().toISOString() };
 }
