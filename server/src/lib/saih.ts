@@ -39,8 +39,20 @@ function firstLayerName(node: CapabilitiesLayerNode | undefined): string | null 
 /** Descubre el nombre real de la capa vía GetCapabilities, en vez de asumirlo a ciegas. */
 async function discoverLayerName(capa: SaihCapa): Promise<string> {
   const url = `${SAIH_LAYERS[capa]}?service=WMS&request=GetCapabilities&version=1.3.0`;
-  const res = await fetch(url);
-  if (!res.ok) throw new Error(`GetCapabilities de SAIH ${capa} falló: HTTP ${res.status}`);
+
+  let res: Response;
+  try {
+    res = await fetch(url);
+  } catch (err) {
+    // fetch() resume cualquier problema de red en un escueto "fetch failed" y guarda
+    // el motivo real (DNS, conexión rechazada, certificado...) en `cause`. Sin
+    // sacarlo no hay forma de saber si la URL está mal o si el servidor nos rechaza.
+    const causa = (err as { cause?: { code?: string; message?: string } }).cause;
+    const detalle = causa?.code ?? causa?.message ?? (err as Error).message;
+    throw new Error(`No se pudo conectar con ${url} — ${detalle}`);
+  }
+
+  if (!res.ok) throw new Error(`GetCapabilities de SAIH ${capa} falló: HTTP ${res.status} en ${url}`);
   const xml = await res.text();
   const parsed = xmlParser.parse(xml) as { WMS_Capabilities?: { Capability?: { Layer?: CapabilitiesLayerNode } } };
   const name = firstLayerName(parsed.WMS_Capabilities?.Capability?.Layer);

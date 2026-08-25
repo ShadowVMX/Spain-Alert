@@ -41,9 +41,28 @@ jobs:
       - name: Instalar dependencias
         run: npm run install:all
 
+      # Si el secret no existe, Actions no avisa: lo pasa vacío y el fallo aparece
+      # mucho después, disfrazado de "clave inválida". Este paso lo dice de entrada.
+      # Se aceptan varios nombres porque AEMET_KEY es un error de tecleo fácil de
+      # cometer, y porque el secret puede haberse guardado como "variable".
+      - name: Comprobar que la clave de AEMET está configurada
+        env:
+          CLAVE: ${{ secrets.AEMET_API_KEY || secrets.AEMET_KEY || vars.AEMET_API_KEY || vars.AEMET_KEY }}
+        run: |
+          if [ -z "$CLAVE" ]; then
+            echo "::error::No se encuentra la clave de AEMET."
+            echo "Guárdala en Settings → Secrets and variables → Actions → New repository secret."
+            echo "Se admite el nombre AEMET_API_KEY (recomendado) o AEMET_KEY."
+            echo "Ojo: tiene que estar en la pestaña 'Secrets', no en 'Variables',"
+            echo "y ser un 'repository secret', no uno de entorno."
+            exit 1
+          fi
+          # Solo la longitud: el valor no se imprime nunca.
+          echo "✅ Clave encontrada (${#CLAVE} caracteres)."
+
       - name: Descargar datos de AEMET, EMSC y SAIH
         env:
-          AEMET_API_KEY: ${{ secrets.AEMET_API_KEY }}
+          AEMET_API_KEY: ${{ secrets.AEMET_API_KEY || secrets.AEMET_KEY || vars.AEMET_API_KEY || vars.AEMET_KEY }}
         run: npm --prefix server run generar-datos -- "$GITHUB_WORKSPACE/web/public/datos"
 
       - name: Construir la web
