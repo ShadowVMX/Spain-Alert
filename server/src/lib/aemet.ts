@@ -6,12 +6,50 @@ import { classifyRain, classifyTrend } from "./rain.js";
 
 const AEMET_BASE = "https://opendata.aemet.es/opendata/api";
 
+const URL_ALTA = "https://opendata.aemet.es/centrodedescargas/altaUsuario";
+
+/**
+ * Error de credenciales, separado del resto a propósito: desde 2026 las claves de
+ * AEMET caducan a los 3 meses, así que una clave que funcionaba deja de hacerlo sin
+ * previo aviso. Quien llama a esto debe tratarlo como fallo grave y ruidoso, nunca
+ * como "hoy no hay datos": en una app de avisos, quedarse en silencio es lo peor
+ * que puede pasar.
+ */
+export class AemetAuthError extends Error {
+  readonly esDeAutenticacion = true;
+  constructor(mensaje: string) {
+    super(mensaje);
+    this.name = "AemetAuthError";
+  }
+}
+
 function apiKey(): string {
   const key = process.env.AEMET_API_KEY;
   if (!key) {
-    throw new Error("Falta AEMET_API_KEY. Consigue una gratis en https://opendata.aemet.es/centrodedescargas/altaUsuario");
+    throw new AemetAuthError(`Falta AEMET_API_KEY. Consigue una gratis en ${URL_ALTA}`);
   }
   return key;
+}
+
+/**
+ * Las claves de AEMET son JWT y llevan dentro su fecha de caducidad. Leerla nos
+ * permite avisar ANTES de que expire, en vez de enterarnos el día que la app se
+ * queda muda. Las claves antiguas (indefinidas) no traen "exp": devolvemos null.
+ *
+ * Solo se lee el payload; no se valida la firma, que no es cosa nuestra.
+ */
+export function caducidadDeLaClave(): Date | null {
+  const key = process.env.AEMET_API_KEY;
+  if (!key) return null;
+  try {
+    const payload = key.split(".")[1];
+    if (!payload) return null;
+    const json = JSON.parse(Buffer.from(payload, "base64url").toString("utf-8")) as { exp?: number };
+    if (typeof json.exp !== "number") return null;
+    return new Date(json.exp * 1000);
+  } catch {
+    return null; // no es un JWT legible: no pasa nada, seguimos
+  }
 }
 
 /**
@@ -23,10 +61,20 @@ async function fetchAemet(path: string): Promise<{ raw: Buffer; contentType: str
   const res = await fetch(`${AEMET_BASE}${path}`, {
     headers: { api_key: apiKey(), Accept: "application/json" },
   });
+  if (res.status === 401 || res.status === 403) {
+    throw new AemetAuthError(
+      `AEMET rechazó la clave (HTTP ${res.status}). Las claves caducan a los 3 meses: pide una nueva en ${URL_ALTA} y actualiza el secret AEMET_API_KEY.`
+    );
+  }
   if (!res.ok) {
     throw new Error(`AEMET rechazó ${path}: HTTP ${res.status}`);
   }
   const meta = (await res.json()) as { estado: number; datos?: string; descripcion?: string };
+  if (meta.estado === 401 || meta.estado === 403) {
+    throw new AemetAuthError(
+      `AEMET rechazó la clave (estado ${meta.estado}: ${meta.descripcion ?? "sin detalle"}). Las claves caducan a los 3 meses: pide una nueva en ${URL_ALTA} y actualiza el secret AEMET_API_KEY.`
+    );
+  }
   if (meta.estado !== 200 || !meta.datos) {
     throw new Error(`AEMET sin datos para ${path}: ${meta.descripcion ?? meta.estado}`);
   }

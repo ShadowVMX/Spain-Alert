@@ -87,6 +87,25 @@ body,
   margin: 0.3rem 0 0;
 }
 
+.stale-banner {
+  background: #78350f;
+  color: #fed7aa;
+  padding: 0.55rem 1rem;
+  font-size: 0.82rem;
+  border-bottom: 1px solid #92400e;
+}
+
+.stale-banner--grave {
+  background: var(--accent);
+  color: #fff;
+  border-bottom-color: #991b1b;
+}
+
+.stale-banner a {
+  color: inherit;
+  font-weight: 600;
+}
+
 .map-wrap {
   position: relative;
   flex: 1;

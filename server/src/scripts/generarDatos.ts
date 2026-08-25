@@ -1,7 +1,7 @@
 import "dotenv/config";
 import fs from "node:fs/promises";
 import path from "node:path";
-import { getActiveWarnings, getWeatherStations } from "../lib/aemet.js";
+import { AemetAuthError, caducidadDeLaClave, getActiveWarnings, getWeatherStations } from "../lib/aemet.js";
 import { getRecentEarthquakes } from "../lib/earthquakes.js";
 import { getSaihLayerName, SAIH_LAYERS } from "../lib/saih.js";
 import type { SaihCapa } from "../lib/saih.js";
@@ -12,8 +12,16 @@ import type { SaihCapa } from "../lib/saih.js";
  * cada pocos minutos con la clave de AEMET guardada como secret del repo,
  * de modo que la clave nunca llega al navegador.
  *
- * Cada fuente se guarda por separado y un fallo en una NO tumba a las demás:
- * es preferible publicar con los terremotos caídos que quedarse sin avisos de lluvia.
+ * POLÍTICA DE FALLOS (importante en una app de avisos):
+ *
+ * - Si falla una fuente secundaria (terremotos, SAIH), se publica igualmente:
+ *   más vale un mapa con los avisos de lluvia que ningún mapa.
+ * - Si falla TODA la lluvia (avisos + estaciones), se aborta con error. Al no
+ *   desplegarse nada, GitHub Pages sigue sirviendo la última versión buena y
+ *   GitHub avisa por email del workflow fallido. Publicar un mapa vacío sería
+ *   peor: parecería que no hay peligro en ningún sitio.
+ * - Si la clave está caducada o es inválida, se aborta siempre y se dice
+ *   explícitamente qué hay que hacer (las claves de AEMET caducan a los 3 meses).
  */
 
 const outDir = process.argv[2] ?? path.resolve(process.cwd(), "../web/public/datos");
@@ -22,13 +30,14 @@ interface Resultado {
   archivo: string;
   ok: boolean;
   detalle: string;
+  authError?: boolean;
 }
 
 async function escribir(nombre: string, datos: unknown): Promise<void> {
   await fs.writeFile(path.join(outDir, nombre), JSON.stringify(datos), "utf-8");
 }
 
-async function generar<T>(archivo: string, etiqueta: string, fetcher: () => Promise<T>): Promise<Resultado> {
+async function generar<T>(archivo: string, fetcher: () => Promise<T>): Promise<Resultado> {
   try {
     const datos = await fetcher();
     await escribir(archivo, datos);
@@ -36,8 +45,14 @@ async function generar<T>(archivo: string, etiqueta: string, fetcher: () => Prom
     return { archivo, ok: true, detalle: n === undefined ? "ok" : `${n} elementos` };
   } catch (err) {
     // Dejamos una colección vacía para que el frontend no reviente al leerla.
-    await escribir(archivo, { type: "FeatureCollection", features: [], actualizado: new Date().toISOString(), error: (err as Error).message });
-    return { archivo, ok: false, detalle: (err as Error).message };
+    // Si el fallo es grave, main() aborta antes de que esto llegue a publicarse.
+    await escribir(archivo, {
+      type: "FeatureCollection",
+      features: [],
+      actualizado: new Date().toISOString(),
+      error: (err as Error).message,
+    });
+    return { archivo, ok: false, detalle: (err as Error).message, authError: err instanceof AemetAuthError };
   }
 }
 
@@ -65,28 +80,75 @@ async function generarSaih(): Promise<Resultado> {
   return { archivo: "saih.json", ok: okCount > 0, detalle: `${okCount}/${capas.length} capas descubiertas` };
 }
 
+function abortar(motivo: string, detalle: string): never {
+  console.error(`\n❌ ${motivo}`);
+  console.error(`   ${detalle}`);
+  console.error("\n   No se publica nada: GitHub Pages seguirá sirviendo los últimos datos buenos");
+  console.error("   en lugar de un mapa vacío que parecería decir que no hay ningún peligro.");
+  process.exit(1);
+}
+
+const DIAS_PARA_AVISAR = 14;
+
+/**
+ * Avisa con antelación de que hay que renovar la clave. En GitHub Actions el
+ * prefijo ::warning:: hace que aparezca destacado en el resumen del workflow.
+ */
+function comprobarCaducidadClave(): void {
+  const caduca = caducidadDeLaClave();
+  if (!caduca) return;
+
+  const diasRestantes = Math.floor((caduca.getTime() - Date.now()) / (24 * 60 * 60 * 1000));
+  const fecha = caduca.toISOString().slice(0, 10);
+
+  if (diasRestantes <= DIAS_PARA_AVISAR) {
+    console.log(
+      `::warning::La clave de AEMET caduca el ${fecha} (quedan ${diasRestantes} días). ` +
+        `Pide una nueva en ${"https://opendata.aemet.es/centrodedescargas/altaUsuario"} y actualiza el secret AEMET_API_KEY antes de esa fecha.`
+    );
+  } else {
+    console.log(`🔑 La clave de AEMET caduca el ${fecha} (quedan ${diasRestantes} días).`);
+  }
+}
+
 async function main() {
   await fs.mkdir(outDir, { recursive: true });
   console.log(`Generando datos en ${outDir}`);
+  comprobarCaducidadClave();
 
-  const resultados = await Promise.all([
-    generar("avisos.json", "avisos AEMET", getActiveWarnings),
-    generar("estaciones.json", "estaciones AEMET", getWeatherStations),
-    generar("terremotos.json", "terremotos EMSC", getRecentEarthquakes),
+  const [avisos, estaciones, terremotos, saih] = await Promise.all([
+    generar("avisos.json", getActiveWarnings),
+    generar("estaciones.json", getWeatherStations),
+    generar("terremotos.json", getRecentEarthquakes),
     generarSaih(),
   ]);
 
-  await escribir("meta.json", { actualizado: new Date().toISOString() });
+  await escribir("meta.json", {
+    actualizado: new Date().toISOString(),
+    fuentes: {
+      avisos: avisos.ok,
+      estaciones: estaciones.ok,
+      terremotos: terremotos.ok,
+      saih: saih.ok,
+    },
+  });
 
-  for (const r of resultados) {
+  for (const r of [avisos, estaciones, terremotos, saih]) {
     console.log(`${r.ok ? "✅" : "⚠️ "} ${r.archivo}: ${r.detalle}`);
   }
 
-  // Si TODO ha fallado no tiene sentido publicar: probablemente falta la clave.
-  if (resultados.every((r) => !r.ok)) {
-    console.error("Ninguna fuente de datos respondió. ¿Está configurado el secret AEMET_API_KEY?");
-    process.exit(1);
+  if (avisos.authError || estaciones.authError) {
+    abortar(
+      "La clave de AEMET no es válida o ha caducado.",
+      `Pide una nueva en https://opendata.aemet.es/centrodedescargas/altaUsuario y actualízala en Settings → Secrets and variables → Actions → AEMET_API_KEY.`
+    );
   }
+
+  if (!avisos.ok && !estaciones.ok) {
+    abortar("No se pudo obtener ningún dato de lluvia de AEMET.", `avisos: ${avisos.detalle} | estaciones: ${estaciones.detalle}`);
+  }
+
+  console.log("\nDatos listos para publicar.");
 }
 
 main().catch((err) => {

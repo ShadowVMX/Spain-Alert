@@ -2,6 +2,7 @@ import { useEffect, useState } from "react";
 import { MapView } from "./components/MapView";
 import { Legend } from "./components/Legend";
 import { AlertBanner } from "./components/AlertBanner";
+import { StaleBanner } from "./components/StaleBanner";
 import { useGeolocation } from "./hooks/useGeolocation";
 import { useHazardData } from "./hooks/useHazardData";
 import { useNearbyAlerts } from "./hooks/useNearbyAlerts";
@@ -56,6 +57,8 @@ export default function App() {
         </div>
         {geo.error && <p className="error-text">No se pudo obtener tu ubicación: {geo.error}</p>}
       </header>
+
+      <StaleBanner actualizado={datos.actualizado} />
 
       <main className="map-wrap">
         <MapView

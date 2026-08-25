@@ -80,6 +80,26 @@ Sin esto no hay datos de lluvia. Es gratis y tarda 5 minutos:
 3. Guárdala. Según cómo despliegues va en `server/.env` o como *secret* del repo
    (ver más abajo).
 
+> **⚠️ Las claves de AEMET caducan a los 3 meses.** Antes eran indefinidas, pero
+> AEMET cambió la política: las nuevas claves duran 90 días, y desde el
+> **15 de octubre de 2026** las antiguas sin fecha de caducidad dejan de funcionar
+> (devuelven 401). Renovarla es repetir el mismo trámite de arriba y actualizar el
+> secret.
+>
+> El proyecto está preparado para que esto no te pille por sorpresa:
+> - **Avisa con antelación**: el descargador lee la fecha de caducidad que la propia
+>   clave lleva dentro y, cuando quedan menos de 14 días, deja un aviso destacado en
+>   el resumen del workflow de Actions.
+> - **Falla ruidosamente, no en silencio**: si la clave caduca, el workflow **falla**
+>   (y GitHub te manda un email) en lugar de publicar un mapa vacío. Pages sigue
+>   sirviendo los últimos datos buenos.
+> - **La app lo dice en pantalla**: si los datos llevan más de 40 min sin
+>   actualizarse aparece un aviso, y pasadas 3 horas se vuelve rojo y remite a los
+>   avisos oficiales de AEMET.
+>
+> Esto último no es paranoia: en una app de avisos, unos datos viejos son más
+> peligrosos que no tener datos, porque un mapa en calma hace creer que no hay peligro.
+
 > La clave es personal. Nunca la subas a GitHub — `.env` ya está en `.gitignore`.
 > Como *secret* de GitHub sí es seguro: no aparece en el código publicado y GitHub
 > la censura incluso en los logs de los workflows.
