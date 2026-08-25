@@ -14,6 +14,11 @@ No sustituye a Protección Civil ni a los canales oficiales de emergencias (112)
 es una capa adicional, más rápida y más visual, pensada para que nadie se quede sin
 enterarse a tiempo.
 
+> **Estado: código listo, todavía sin desplegar.** Esto es el repositorio, no un
+> servicio en marcha: no hay ninguna URL pública que abrir. Para usarlo hay que
+> ejecutarlo (en tu ordenador o en un hosting) con una clave de AEMET —
+> ver [Puesta en marcha](#puesta-en-marcha), son unos minutos.
+
 ## Arquitectura
 
 ```
@@ -55,35 +60,70 @@ de peticiones gratuito) y normaliza todo a GeoJSON con un formato común.
 
 ## Puesta en marcha
 
-### 1. Backend
+### Paso 0 (obligatorio): la clave de AEMET
+
+Sin esto no hay datos de lluvia. Es gratis y tarda 5 minutos:
+
+1. Entra en https://opendata.aemet.es/centrodedescargas/altaUsuario
+2. Pon tu email → llega un correo de confirmación → confirmas → llega un
+   **segundo** correo con la clave (es una cadena larguísima, se copia entera).
+3. Guárdala: va en `server/.env` como `AEMET_API_KEY=...`
+
+> La clave es personal. Nunca la subas a GitHub — `.env` ya está en `.gitignore`.
+
+### Opción A — verlo funcionando en tu ordenador (lo más rápido)
+
+Necesitas [Node.js 20 o superior](https://nodejs.org). Desde la raíz del repo:
 
 ```bash
-cd server
-cp .env.example .env
-# Rellena AEMET_API_KEY (gratis, la manda por email):
-# https://opendata.aemet.es/centrodedescargas/altaUsuario
-npm install
-npm run dev       # http://localhost:8787
+npm run install:all          # instala todo (server + web)
+
+cp server/.env.example server/.env
+# edita server/.env y pega tu AEMET_API_KEY
+
+npm run build                # construye la web y el servidor
+npm start                    # -> http://localhost:8787
 ```
 
-### 2. Frontend
+Abre `http://localhost:8787` y ya está: un único proceso sirve el mapa y la API.
+
+¿Vas a tocar el código? Entonces mejor modo desarrollo, con recarga automática,
+en dos terminales:
 
 ```bash
-cd web
-npm install
-npm run dev        # http://localhost:5173, proxy automático a /api -> :8787
+npm run dev:server           # terminal 1
+npm run dev:web              # terminal 2 -> http://localhost:5173
 ```
 
-Abre `http://localhost:5173`. En local, las notificaciones del navegador y el audio
-funcionan directamente; para producción sirve el frontend por HTTPS (necesario para
-geolocalización y notificaciones en móvil).
+### Opción B — ponerlo online para que lo use cualquiera
 
-> **Nota sobre esta sandbox de desarrollo:** el entorno donde se ha escrito este
-> código bloquea las conexiones salientes a `opendata.aemet.es`, `seismicportal.eu`
-> y `wms.mapama.gob.es`, así que ninguna llamada real se ha podido probar en vivo
-> aquí (se ha comprobado que el servidor arranca, sirve `/api/health` y devuelve
-> errores controlados en todos los casos, incluidos los del SAIH). En tu máquina o
-> en un hosting normal:
+El repo incluye un `Dockerfile` que empaqueta web + API en un solo servicio, así
+que vale casi cualquier hosting (Render, Railway, Fly.io, un VPS...). Lo único
+que tiene que configurar el hosting es:
+
+- la variable de entorno **`AEMET_API_KEY`** con tu clave,
+- el puerto, que se lee de **`PORT`** (la mayoría de hostings lo inyectan solos).
+
+```bash
+docker build -t alerta-espana .
+docker run -p 8787:8787 -e AEMET_API_KEY=tu_clave alerta-espana
+```
+
+**Importante para móvil:** la geolocalización y las notificaciones **solo
+funcionan bajo HTTPS** (o en `localhost`). Cualquiera de esos hostings te da
+HTTPS automático; si montas un VPS a mano, necesitas un certificado
+(Caddy o Let's Encrypt lo resuelven en un comando).
+
+### Qué está probado y qué no
+
+Lo verificado hasta ahora: que todo compila, que el servidor arranca, que sirve
+el mapa y la API en un solo puerto, y que cuando una fuente externa falla
+devuelve un error controlado en vez de caerse.
+
+Lo **no** verificado: las llamadas reales a las fuentes de datos. El entorno
+donde se escribió este código bloquea las conexiones salientes a
+`opendata.aemet.es`, `seismicportal.eu` y `wms.mapama.gob.es`, así que la primera
+vez que este proyecto hable de verdad con AEMET será en tu despliegue. Concretando:
 > - **AEMET y EMSC** son APIs REST estándar y bien documentadas — deberían funcionar
 >   sin cambios en cuanto pongas la API key de AEMET.
 > - **El WMS nacional del SAIH** (`server/src/lib/saih.ts`) se ha construido a partir
