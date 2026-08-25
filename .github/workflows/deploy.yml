@@ -1,0 +1,63 @@
+name: Publicar en GitHub Pages
+
+# GitHub Pages no puede ejecutar nuestro servidor Node, así que este workflow hace
+# de "servidor por lotes": descarga los datos de AEMET/EMSC/SAIH con la clave
+# guardada como secret, los deja como archivos JSON y publica la web ya construida.
+# Así la clave nunca llega al navegador.
+
+on:
+  schedule:
+    # Cada 10 minutos, que es más o menos el ritmo al que AEMET actualiza las
+    # observaciones. GitHub puede retrasar las ejecuciones programadas cuando hay
+    # mucha carga: no lo trates como un sistema de tiempo real garantizado.
+    - cron: "*/10 * * * *"
+  push:
+    branches: [main]
+  workflow_dispatch: # permite lanzarlo a mano desde la pestaña Actions
+
+permissions:
+  contents: read
+  pages: write
+  id-token: write
+
+# Si un despliegue está en curso, dejamos que termine y encolamos el siguiente.
+concurrency:
+  group: pages
+  cancel-in-progress: false
+
+jobs:
+  publicar:
+    runs-on: ubuntu-latest
+    environment:
+      name: github-pages
+      url: ${{ steps.deployment.outputs.page_url }}
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+
+      - name: Instalar dependencias
+        run: npm run install:all
+
+      - name: Descargar datos de AEMET, EMSC y SAIH
+        env:
+          AEMET_API_KEY: ${{ secrets.AEMET_API_KEY }}
+        run: npm --prefix server run generar-datos -- "$GITHUB_WORKSPACE/web/public/datos"
+
+      - name: Construir la web
+        env:
+          VITE_DATA_MODE: estatico
+          # En Pages la app vive en /<nombre-del-repo>/, no en la raíz del dominio.
+          VITE_BASE: /${{ github.event.repository.name }}/
+        run: npm --prefix web run build
+
+      - uses: actions/configure-pages@v5
+
+      - uses: actions/upload-pages-artifact@v3
+        with:
+          path: web/dist
+
+      - id: deployment
+        uses: actions/deploy-pages@v4

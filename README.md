@@ -14,21 +14,31 @@ No sustituye a Protección Civil ni a los canales oficiales de emergencias (112)
 es una capa adicional, más rápida y más visual, pensada para que nadie se quede sin
 enterarse a tiempo.
 
-> **Estado: código listo, todavía sin desplegar.** Esto es el repositorio, no un
-> servicio en marcha: no hay ninguna URL pública que abrir. Para usarlo hay que
-> ejecutarlo (en tu ordenador o en un hosting) con una clave de AEMET —
-> ver [Puesta en marcha](#puesta-en-marcha), son unos minutos.
+> **Estado: código listo, pendiente de activar el despliegue.** El repositorio ya
+> trae todo lo necesario para publicarse solo en GitHub Pages, pero hace falta dar
+> tres clics en la configuración del repo (hacerlo público, guardar la clave de
+> AEMET y activar Pages) — ver [Puesta en marcha](#puesta-en-marcha).
 
 ## Arquitectura
 
 ```
-server/   API en Node/Express (TypeScript) — agrega y normaliza datos oficiales
+server/   Node/Express (TypeScript) — descarga y normaliza los datos oficiales
 web/      App web (Vite + React + Leaflet) — mapa, capas y alertas por geolocalización
+.github/  Workflow que hace de "servidor por lotes" para el despliegue en Pages
 ```
 
-El frontend nunca llama directamente a AEMET/EMSC: todo pasa por el backend, que
-guarda la API key de AEMET a salvo, cachea las respuestas (para no agotar el límite
-de peticiones gratuito) y normaliza todo a GeoJSON con un formato común.
+La app funciona en **dos modos**, con el mismo código:
+
+- **Estático** (GitHub Pages): GitHub Actions ejecuta el descargador cada 10 min y
+  deja los datos como archivos JSON. No hay servidor en marcha.
+- **Con servidor** (Docker): el backend descarga los datos en vivo en cada consulta.
+
+En ambos casos la clave de AEMET vive solo en el lado del servidor/runner y nunca
+llega al navegador, y las respuestas se normalizan a GeoJSON con un formato común.
+
+**Las alertas se calculan en el navegador** (`web/src/alertEngine.ts`), no en el
+servidor. Además de permitir el modo estático, esto significa que la ubicación del
+usuario nunca sale de su dispositivo.
 
 ### Fuentes de datos integradas ahora mismo
 
@@ -67,11 +77,63 @@ Sin esto no hay datos de lluvia. Es gratis y tarda 5 minutos:
 1. Entra en https://opendata.aemet.es/centrodedescargas/altaUsuario
 2. Pon tu email → llega un correo de confirmación → confirmas → llega un
    **segundo** correo con la clave (es una cadena larguísima, se copia entera).
-3. Guárdala: va en `server/.env` como `AEMET_API_KEY=...`
+3. Guárdala. Según cómo despliegues va en `server/.env` o como *secret* del repo
+   (ver más abajo).
 
 > La clave es personal. Nunca la subas a GitHub — `.env` ya está en `.gitignore`.
+> Como *secret* de GitHub sí es seguro: no aparece en el código publicado y GitHub
+> la censura incluso en los logs de los workflows.
 
-### Opción A — verlo funcionando en tu ordenador (lo más rápido)
+### Opción A — GitHub Pages, gratis y sin servidor (recomendada)
+
+GitHub Pages solo sirve archivos estáticos, así que no puede ejecutar el servidor
+Node. La solución: **GitHub Actions hace de servidor por lotes**. Cada 10 minutos
+descarga los datos de AEMET/EMSC/SAIH con la clave guardada como secret, los deja
+como archivos JSON y publica la web. El navegador solo lee esos archivos.
+
+Efecto secundario muy bueno: como no hay backend, **el cálculo de alertas se hace
+en el propio dispositivo**, así que la ubicación del usuario no viaja a ningún sitio.
+
+**⚠️ El repositorio tiene que ser público.** En el plan gratuito de GitHub:
+
+| | Repo público | Repo privado (plan Free) |
+|---|---|---|
+| GitHub Actions | gratis e ilimitado | 2.000 min/mes, después se paga |
+| GitHub Pages | gratis | ❌ no disponible |
+
+Con el cron cada 10 min son unos 8.600 min/mes: en público **0 €**, en privado
+rondaría los **50 $/mes** (y ni siquiera tendrías Pages sin GitHub Pro).
+
+Pasos, todo desde la web de GitHub:
+
+1. **Hacer el repo público**
+   `Settings` → abajo del todo, `Danger Zone` → `Change visibility` → `Public`.
+2. **Guardar la clave de AEMET**
+   `Settings` → `Secrets and variables` → `Actions` → `New repository secret`
+   - Name: `AEMET_API_KEY`
+   - Secret: la clave que te mandó AEMET
+3. **Activar Pages**
+   `Settings` → `Pages` → en `Source` elige **GitHub Actions** (no "Deploy from a branch").
+4. **Lanzar el primer despliegue**
+   `Actions` → `Publicar en GitHub Pages` → `Run workflow`.
+
+En 2-3 minutos estará en `https://shadowvmx.github.io/Spain-Alert/`, y a partir
+de ahí se actualiza solo cada 10 minutos.
+
+**Limitaciones honestas de este modo**, que conviene tener claras en una app de
+seguridad:
+
+- Los datos se refrescan cada ~10 min, y GitHub **puede retrasar** las ejecuciones
+  programadas cuando sus servidores van cargados. No es un sistema de tiempo real
+  garantizado. Para lluvia es aceptable (AEMET publica a ese mismo ritmo), pero si
+  esto llega a usarse en serio conviene mover la descarga de datos a un servidor
+  propio — el `Dockerfile` de la Opción C ya lo permite sin reescribir nada.
+- No hay notificaciones con la app cerrada (eso necesita backend, está en el roadmap).
+- La consulta de detalle al tocar una capa del SAIH no funciona sin backend (CORS);
+  las capas sí se ven.
+- GitHub desactiva los workflows programados si el repo pasa 60 días sin actividad.
+
+### Opción B — verlo funcionando en tu ordenador
 
 Necesitas [Node.js 20 o superior](https://nodejs.org). Desde la raíz del repo:
 
@@ -95,11 +157,12 @@ npm run dev:server           # terminal 1
 npm run dev:web              # terminal 2 -> http://localhost:5173
 ```
 
-### Opción B — ponerlo online para que lo use cualquiera
+### Opción C — hosting propio con el servidor Node (datos en vivo)
 
 El repo incluye un `Dockerfile` que empaqueta web + API en un solo servicio, así
-que vale casi cualquier hosting (Render, Railway, Fly.io, un VPS...). Lo único
-que tiene que configurar el hosting es:
+que vale casi cualquier hosting (Render, Railway, Fly.io, un VPS...). Es la opción
+a la que hay que pasar si la app se usa en serio: los datos se piden en vivo en cada
+consulta en lugar de cada 10 minutos. Lo único que tiene que configurar el hosting es:
 
 - la variable de entorno **`AEMET_API_KEY`** con tu clave,
 - el puerto, que se lee de **`PORT`** (la mayoría de hostings lo inyectan solos).
@@ -116,9 +179,15 @@ HTTPS automático; si montas un VPS a mano, necesitas un certificado
 
 ### Qué está probado y qué no
 
-Lo verificado hasta ahora: que todo compila, que el servidor arranca, que sirve
-el mapa y la API en un solo puerto, y que cuando una fuente externa falla
-devuelve un error controlado en vez de caerse.
+Lo verificado hasta ahora:
+
+- Todo compila; el servidor arranca y sirve el mapa y la API en un solo puerto.
+- Cuando una fuente externa falla se devuelve un error controlado en vez de caerse,
+  y el resto de capas siguen funcionando.
+- **El motor de alertas se ha probado en un navegador real** (Chromium con
+  geolocalización simulada) contra un escenario sintético de DANA: estando en
+  Valencia con aviso rojo y 78 mm/h, salta la tarjeta de alerta con sus
+  instrucciones; estando en Madrid sin lluvia, no salta nada (sin falsas alarmas).
 
 Lo **no** verificado: las llamadas reales a las fuentes de datos. El entorno
 donde se escribió este código bloquea las conexiones salientes a

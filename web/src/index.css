@@ -76,6 +76,11 @@ body,
   font-size: 0.85rem;
 }
 
+.meta-text {
+  font-size: 0.75rem;
+  color: var(--muted);
+}
+
 .error-text {
   color: #fca5a5;
   font-size: 0.8rem;

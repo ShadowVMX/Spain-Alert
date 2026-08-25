@@ -1,13 +1,12 @@
 {
   "name": "Alerta España - Riesgos en tiempo real",
   "short_name": "Alerta España",
-  "description": "Mapa nacional de sensores y avisos: lluvia, viento, DANA, riadas y terremotos, con alertas por proximidad.",
-  "start_url": "/",
+  "description": "Mapa nacional de sensores y avisos: lluvia, DANA, riadas, viento y terremotos, con alertas por proximidad.",
+  "start_url": "./",
+  "scope": "./",
   "display": "standalone",
   "background_color": "#0f172a",
   "theme_color": "#b91c1c",
   "lang": "es",
-  "icons": [
-    { "src": "/icon.svg", "sizes": "any", "type": "image/svg+xml", "purpose": "any maskable" }
-  ]
+  "icons": [{ "src": "./icon.svg", "sizes": "any", "type": "image/svg+xml", "purpose": "any maskable" }]
 }

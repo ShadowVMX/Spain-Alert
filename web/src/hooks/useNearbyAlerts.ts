@@ -1,14 +1,16 @@
 import { useEffect, useRef, useState } from "react";
-import { fetchNearbyAlerts } from "../api";
+import { calcularAlertasCercanas } from "../alertEngine";
+import type { Datos } from "../alertEngine";
 import { playSiren } from "../siren";
 import type { NearbyAlert } from "../types";
 
-const POLL_MS = 60_000;
-
-export function useNearbyAlerts(lat: number | null, lon: number | null) {
+/**
+ * Recalcula las alertas cada vez que cambia la posición o llegan datos nuevos.
+ * El cálculo es local (ver alertEngine.ts): la ubicación no se envía a ningún sitio.
+ */
+export function useNearbyAlerts(lat: number | null, lon: number | null, datos: Datos) {
   const [alerts, setAlerts] = useState<NearbyAlert[]>([]);
-  const [error, setError] = useState<string | null>(null);
-  const seen = useRef<Set<string>>(new Set());
+  const vistas = useRef<Set<string>>(new Set());
 
   useEffect(() => {
     if (lat === null || lon === null) {
@@ -16,41 +18,24 @@ export function useNearbyAlerts(lat: number | null, lon: number | null) {
       return;
     }
 
-    let cancelled = false;
+    const nuevas = calcularAlertasCercanas(lat, lon, datos);
+    setAlerts(nuevas);
 
-    async function check() {
-      try {
-        const { alerts: nuevas } = await fetchNearbyAlerts(lat as number, lon as number);
-        if (cancelled) return;
-        setError(null);
-        setAlerts(nuevas);
+    for (const a of nuevas) {
+      const clave = `${a.tipo}-${a.titulo}`;
+      if (vistas.current.has(clave)) continue;
+      vistas.current.add(clave);
 
-        for (const a of nuevas) {
-          const key = `${a.tipo}-${a.titulo}`;
-          if (seen.current.has(key)) continue;
-          seen.current.add(key);
-
-          playSiren();
-          if ("Notification" in window && Notification.permission === "granted") {
-            new Notification(`⚠️ ${a.titulo}`, {
-              body: a.instrucciones[0],
-              tag: key,
-              requireInteraction: true,
-            });
-          }
-        }
-      } catch (err) {
-        if (!cancelled) setError((err as Error).message);
+      playSiren();
+      if ("Notification" in window && Notification.permission === "granted") {
+        new Notification(`⚠️ ${a.titulo}`, {
+          body: a.instrucciones[0],
+          tag: clave,
+          requireInteraction: true,
+        });
       }
     }
+  }, [lat, lon, datos]);
 
-    void check();
-    const id = setInterval(check, POLL_MS);
-    return () => {
-      cancelled = true;
-      clearInterval(id);
-    };
-  }, [lat, lon]);
-
-  return { alerts, error };
+  return { alerts };
 }

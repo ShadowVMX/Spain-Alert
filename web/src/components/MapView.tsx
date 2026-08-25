@@ -1,50 +1,26 @@
-import { useEffect, useState } from "react";
 import { CircleMarker, GeoJSON, MapContainer, Popup, TileLayer } from "react-leaflet";
 import type { Layer } from "leaflet";
-import { fetchEarthquakes, fetchStations, fetchWarnings } from "../api";
 import { HAZARD_LABEL, RAIN_INTENSITY_LABEL, SEVERITY_COLOR, rainIntensityColor } from "../types";
-import type { EarthquakeProperties, GeoFeatureCollection, SaihCapa, WarningProperties, WeatherStationProperties } from "../types";
+import type { SaihCapa } from "../types";
+import type { HazardData } from "../hooks/useHazardData";
 import { SaihLayer } from "./SaihLayer";
 
 const SPAIN_CENTER: [number, number] = [40.2, -3.7];
 
 interface Props {
+  datos: HazardData;
   showWarnings: boolean;
   showStations: boolean;
   showQuakes: boolean;
   saihLayers: SaihCapa[];
   userPos: { lat: number; lon: number } | null;
-  refreshKey: number;
 }
 
-export function MapView({ showWarnings, showStations, showQuakes, saihLayers, userPos, refreshKey }: Props) {
-  const [warnings, setWarnings] = useState<GeoFeatureCollection<WarningProperties> | null>(null);
-  const [stations, setStations] = useState<GeoFeatureCollection<WeatherStationProperties> | null>(null);
-  const [quakes, setQuakes] = useState<GeoFeatureCollection<EarthquakeProperties> | null>(null);
-  const [loadError, setLoadError] = useState<string | null>(null);
-
-  useEffect(() => {
-    let cancelled = false;
-    Promise.allSettled([fetchWarnings(), fetchStations(), fetchEarthquakes()]).then(([w, s, q]) => {
-      if (cancelled) return;
-      if (w.status === "fulfilled") setWarnings(w.value);
-      if (s.status === "fulfilled") setStations(s.value);
-      if (q.status === "fulfilled") setQuakes(q.value);
-      const failed = [w, s, q].filter((r) => r.status === "rejected") as PromiseRejectedResult[];
-      setLoadError(failed.length > 0 ? failed.map((f) => String(f.reason?.message ?? f.reason)).join(" · ") : null);
-    });
-    return () => {
-      cancelled = true;
-    };
-  }, [refreshKey]);
-
+export function MapView({ datos, showWarnings, showStations, showQuakes, saihLayers, userPos }: Props) {
   return (
     <div style={{ position: "relative", height: "100%", width: "100%" }}>
-      {loadError && (
-        <div className="load-error-banner">
-          No se pudieron cargar algunas capas ({loadError}). Comprueba la clave de AEMET en el servidor.
-        </div>
-      )}
+      {datos.error && <div className="load-error-banner">No se pudieron cargar algunas capas ({datos.error}).</div>}
+
       <MapContainer center={SPAIN_CENTER} zoom={6} minZoom={5} style={{ height: "100%", width: "100%" }}>
         <TileLayer
           attribution='&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a>'
@@ -56,7 +32,7 @@ export function MapView({ showWarnings, showStations, showQuakes, saihLayers, us
         ))}
 
         {showWarnings &&
-          warnings?.features.map((f) => (
+          datos.avisos?.features.map((f) => (
             <GeoJSON
               key={f.properties.id}
               data={f as GeoJSON.Feature}
@@ -70,16 +46,15 @@ export function MapView({ showWarnings, showStations, showQuakes, saihLayers, us
           ))}
 
         {showStations &&
-          stations?.features.map((f) => {
-            const rain = f.properties.precipitacion1h_mm ?? 0;
-            const color = rainIntensityColor(rain);
+          datos.estaciones?.features.map((f) => {
+            const lluvia = f.properties.precipitacion1h_mm ?? 0;
             const geom = f.geometry as GeoJSON.Point;
             return (
               <CircleMarker
                 key={f.properties.id}
                 center={[geom.coordinates[1], geom.coordinates[0]]}
-                radius={rain >= 15 ? 7 : rain > 0 ? 5 : 4}
-                pathOptions={{ color, fillOpacity: 0.75 }}
+                radius={lluvia >= 15 ? 7 : lluvia > 0 ? 5 : 4}
+                pathOptions={{ color: rainIntensityColor(lluvia), fillOpacity: 0.75 }}
               >
                 <Popup>
                   <strong>{f.properties.nombre}</strong>
@@ -104,7 +79,7 @@ export function MapView({ showWarnings, showStations, showQuakes, saihLayers, us
           })}
 
         {showQuakes &&
-          quakes?.features.map((f) => {
+          datos.terremotos?.features.map((f) => {
             const geom = f.geometry as GeoJSON.Point;
             const mag = f.properties.magnitud;
             return (
@@ -128,7 +103,11 @@ export function MapView({ showWarnings, showStations, showQuakes, saihLayers, us
           })}
 
         {userPos && (
-          <CircleMarker center={[userPos.lat, userPos.lon]} radius={8} pathOptions={{ color: "#111827", fillColor: "#22c55e", fillOpacity: 0.9, weight: 2 }}>
+          <CircleMarker
+            center={[userPos.lat, userPos.lon]}
+            radius={8}
+            pathOptions={{ color: "#111827", fillColor: "#22c55e", fillOpacity: 0.9, weight: 2 }}
+          >
             <Popup>Tu ubicación</Popup>
           </CircleMarker>
         )}
