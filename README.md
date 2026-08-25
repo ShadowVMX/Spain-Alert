@@ -265,16 +265,42 @@ mapa en calma hace creer que no hay peligro. Por eso:
 - ✅ Todo compila; el servidor sirve mapa y API en un solo puerto.
 - ✅ El motor de alertas, en navegador real con geolocalización simulada: en Valencia
   con aviso rojo y 78 mm/h **salta la alerta**; en Madrid sin lluvia **no salta nada**.
-- ✅ La interfaz con 800 estaciones: ~56 fps al hacer zoom, sin errores de JavaScript,
-  sin desbordes en móvil de 390 px.
 - ✅ La detección de clave caducada: avisa a 14 días, aborta si la clave no vale.
+- ✅ Las fuentes reales responden: AEMET devuelve avisos y estaciones con una clave
+  válida, y EMSC unos 200 terremotos por consulta.
 
-**No verificado:** las llamadas reales a las fuentes. El entorno donde se escribió
-este código bloquea la salida a `opendata.aemet.es`, `seismicportal.eu`,
-`wms.mapama.gob.es`, `rainviewer.com` y los servidores de mapas, así que la primera
-vez que hable de verdad con AEMET será en el primer despliegue. AEMET, EMSC y
-RainViewer son APIs estándar y documentadas; **el WMS del SAIH es el más incierto** y
-es lo primero que conviene mirar.
+**Rendimiento en móvil**, medido con 800 estaciones (88 de ellas con marcador
+animado) en un viewport de 390×844 y la CPU frenada para aproximar equipos reales:
+
+| CPU | fps al hacer zoom | respuesta al toque |
+|---|---|---|
+| 1x (escritorio) | 60 | 16 ms |
+| 4x más lenta (gama media) | 56 | 8 ms |
+| 6x más lenta (gama baja) | 54 | 14 ms |
+
+Apenas baja porque el mapa no está limitado por CPU: Leaflet mueve las capas con
+transformaciones CSS, que van por GPU. El freno de CPU está verificado aparte con una
+carga de cálculo puro (89 ms → 330 ms → 539 ms, proporcional al factor aplicado).
+
+Dos salvedades honestas: frenar la CPU **no** simula una GPU más débil ni menos
+memoria, así que esto es un indicio y no una prueba sobre un móvil de gama baja real;
+y una medición anterior de "~56 fps" se hizo con 804 estaciones cuando el despliegue
+real llegó a tener 10.657, de modo que no describía lo que estaba publicado. Ese
+recuento ya está corregido.
+
+**Pendiente:**
+
+- ❌ **El SAIH no carga.** `wms.mapama.gob.es` responde con
+  `UNABLE_TO_VERIFY_LEAF_SIGNATURE`: le falta el certificado intermedio en la cadena
+  TLS. Los navegadores lo resuelven solos buscándolo por su cuenta; Node no. Está por
+  ver si las teselas se ven igualmente en el navegador aunque el servidor no pueda
+  leer el nombre de la capa.
+- ⚠️ **El radar y el mapa base** (RainViewer, CARTO) no se han podido comprobar
+  todavía sobre datos reales: el entorno de desarrollo bloquea la salida a esos
+  servidores, así que solo se verán en el despliegue.
+- ⚠️ **Los avisos CAP** se han probado con datos sintéticos. En el primer despliegue
+  real España no tenía ningún aviso activo, así que el parseo del formato oficial
+  todavía no se ha visto funcionar con un aviso de verdad.
 
 ---
 
