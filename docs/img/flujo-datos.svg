@@ -1,0 +1,91 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 800 760" width="800" height="760" role="img" aria-label="Flujo de datos: las fuentes oficiales se normalizan, se publican y el navegador decide si te afecta">
+  <defs>
+    <marker id="flecha" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse">
+      <path d="M0 0L10 5L0 10z" fill="#64748b"/>
+    </marker>
+    <style>
+      .t { font-family: system-ui, -apple-system, "Segoe UI", Roboto, sans-serif; }
+      .tit { font-size: 23px; font-weight: 650; }
+      .sub { font-size: 18px; }
+      .fl { stroke: #64748b; stroke-width: 2.5; fill: none; marker-end: url(#flecha); }
+    </style>
+  </defs>
+
+  <rect width="800" height="760" fill="#070b14"/>
+
+  <!-- Fuentes -->
+  <g class="t">
+    <rect x="24" y="26" width="238" height="96" rx="14" fill="#1e3a5f" stroke="#38bdf8" stroke-width="2"/>
+    <text x="143" y="60" text-anchor="middle" class="tit" fill="#e0f2fe">🌦️ AEMET</text>
+    <text x="143" y="86" text-anchor="middle" class="sub" fill="#bae6fd">avisos oficiales</text>
+    <text x="143" y="108" text-anchor="middle" class="sub" fill="#bae6fd">+ 800 estaciones</text>
+
+    <rect x="281" y="26" width="238" height="96" rx="14" fill="#164e4a" stroke="#22d3ee" stroke-width="2"/>
+    <text x="400" y="60" text-anchor="middle" class="tit" fill="#cffafe">🌊 SAIH</text>
+    <text x="400" y="86" text-anchor="middle" class="sub" fill="#a5f3fc">ríos y embalses</text>
+    <text x="400" y="108" text-anchor="middle" class="sub" fill="#a5f3fc">todas las cuencas</text>
+
+    <rect x="538" y="26" width="238" height="96" rx="14" fill="#3b2f5e" stroke="#a78bfa" stroke-width="2"/>
+    <text x="657" y="60" text-anchor="middle" class="tit" fill="#ede9fe">🌍 EMSC</text>
+    <text x="657" y="86" text-anchor="middle" class="sub" fill="#ddd6fe">terremotos</text>
+    <text x="657" y="108" text-anchor="middle" class="sub" fill="#ddd6fe">red del IGN</text>
+  </g>
+
+  <path class="fl" d="M143 128 V158 H400 V190"/>
+  <path class="fl" d="M400 128 V190"/>
+  <path class="fl" d="M657 128 V158 H400 V190"/>
+
+  <!-- Descargador -->
+  <g class="t">
+    <rect x="215" y="194" width="370" height="82" rx="14" fill="#1e293b" stroke="#64748b" stroke-width="2"/>
+    <text x="400" y="228" text-anchor="middle" class="tit" fill="#f1f5f9">⚙️ Descargador</text>
+    <text x="400" y="256" text-anchor="middle" class="sub" fill="#94a3b8">normaliza todo a GeoJSON</text>
+  </g>
+
+  <path class="fl" d="M400 280 V332"/>
+  <text class="t sub" x="416" y="312" font-size="17" fill="#fbbf24">🔑 la clave se queda aquí</text>
+
+  <!-- Datos publicados -->
+  <g class="t">
+    <rect x="215" y="336" width="330" height="70" rx="14" fill="#1e293b" stroke="#64748b" stroke-width="2"/>
+    <text x="380" y="379" text-anchor="middle" class="tit" fill="#f1f5f9">📦 Datos publicados</text>
+  </g>
+
+  <path class="fl" d="M380 410 V462"/>
+
+  <!-- RainViewer entra directo -->
+  <g class="t">
+    <rect x="566" y="336" width="210" height="82" rx="14" fill="#1e3a5f" stroke="#38bdf8" stroke-width="2"/>
+    <text x="671" y="368" text-anchor="middle" class="tit" fill="#e0f2fe">🌧️ RainViewer</text>
+    <text x="671" y="396" text-anchor="middle" class="sub" fill="#bae6fd">radar animado</text>
+  </g>
+  <path class="fl" d="M671 422 V478 H592"/>
+
+  <!-- Navegador -->
+  <g class="t">
+    <rect x="180" y="466" width="405" height="86" rx="14" fill="#334155" stroke="#94a3b8" stroke-width="2.5"/>
+    <text x="382" y="502" text-anchor="middle" class="tit" fill="#f8fafc">🗺️ El mapa en tu móvil</text>
+    <text x="382" y="530" text-anchor="middle" class="sub" fill="#cbd5e1">aquí se calcula si te afecta</text>
+  </g>
+
+  <path class="fl" d="M382 556 V596"/>
+
+  <!-- Decisión -->
+  <g class="t">
+    <rect x="252" y="600" width="260" height="62" rx="31" fill="#422006" stroke="#f59e0b" stroke-width="2.5"/>
+    <text x="382" y="640" text-anchor="middle" class="tit" fill="#fde68a">¿Te afecta algo?</text>
+  </g>
+
+  <path class="fl" d="M252 631 H163 V690"/>
+  <text class="t sub" x="196" y="622" fill="#94a3b8">sí</text>
+  <path class="fl" d="M512 631 H637 V690"/>
+  <text class="t sub" x="556" y="622" fill="#94a3b8">no</text>
+
+  <g class="t">
+    <rect x="20" y="694" width="286" height="52" rx="14" fill="#7f1d1d" stroke="#ef4444" stroke-width="2"/>
+    <text x="163" y="727" text-anchor="middle" class="tit" fill="#fee2e2">🚨 Sirena + qué hacer</text>
+
+    <rect x="494" y="694" width="286" height="52" rx="14" fill="#14532d" stroke="#22c55e" stroke-width="2"/>
+    <text x="637" y="727" text-anchor="middle" class="tit" fill="#dcfce7">😌 Sigues informado</text>
+  </g>
+</svg>

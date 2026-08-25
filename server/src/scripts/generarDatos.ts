@@ -66,6 +66,8 @@ async function generarSaih(): Promise<Resultado> {
 
   const salida: Record<string, { wmsUrl: string; layer: string } | null> = {};
   let okCount = 0;
+  const fallos: string[] = [];
+
   capas.forEach((capa, i) => {
     const r = resultados[i];
     if (r.status === "fulfilled") {
@@ -73,10 +75,19 @@ async function generarSaih(): Promise<Resultado> {
       okCount++;
     } else {
       salida[capa] = null;
+      // El motivo concreto importa: sin él no hay forma de saber si el WMS cambió
+      // de URL, si rechaza al runner o si el XML no tiene la forma esperada.
+      const motivo = r.reason instanceof Error ? r.reason.message : String(r.reason);
+      fallos.push(`${capa}: ${motivo}`);
     }
   });
 
   await escribir("saih.json", { capas: salida, actualizado: new Date().toISOString() });
+
+  for (const f of fallos) {
+    console.log(`   ↳ SAIH ${f}`);
+  }
+
   return { archivo: "saih.json", ok: okCount > 0, detalle: `${okCount}/${capas.length} capas descubiertas` };
 }
 

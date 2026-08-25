@@ -1,0 +1,84 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 800 620" width="800" height="620" role="img" aria-label="Cómo se decide el aviso propio de riada según la lluvia de las estaciones cercanas">
+  <defs>
+    <marker id="fl2" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse">
+      <path d="M0 0L10 5L0 10z" fill="#64748b"/>
+    </marker>
+    <style>
+      .t { font-family: system-ui, -apple-system, "Segoe UI", Roboto, sans-serif; }
+      .tit { font-size: 23px; font-weight: 650; }
+      .sub { font-size: 18px; }
+      .peq { font-size: 16px; }
+      .fl { stroke: #64748b; stroke-width: 2.5; fill: none; marker-end: url(#fl2); }
+    </style>
+  </defs>
+
+  <rect width="800" height="620" fill="#070b14"/>
+
+  <!-- Entrada -->
+  <g class="t">
+    <rect x="150" y="20" width="360" height="58" rx="14" fill="#1e293b" stroke="#64748b" stroke-width="2"/>
+    <text x="330" y="56" text-anchor="middle" class="tit" fill="#f1f5f9">Estaciones a menos de 12 km</text>
+  </g>
+  <path class="fl" d="M330 82 V118"/>
+
+  <!-- Decisión 1 -->
+  <g class="t">
+    <rect x="150" y="122" width="360" height="58" rx="29" fill="#1e293b" stroke="#64748b" stroke-width="2"/>
+    <text x="330" y="158" text-anchor="middle" class="tit" fill="#e2e8f0">¿Llueve más de 60 mm/h?</text>
+  </g>
+  <path class="fl" d="M510 151 H588"/>
+  <text class="t peq" x="536" y="142" fill="#94a3b8">sí</text>
+  <path class="fl" d="M330 184 V226"/>
+  <text class="t peq" x="342" y="212" fill="#94a3b8">no</text>
+
+  <g class="t">
+    <rect x="592" y="112" width="188" height="78" rx="14" fill="#7f1d1d" stroke="#ef4444" stroke-width="2.5"/>
+    <text x="686" y="144" text-anchor="middle" class="tit" fill="#fee2e2">🔴 ROJO</text>
+    <text x="686" y="170" text-anchor="middle" class="sub" fill="#fecaca">torrencial</text>
+  </g>
+
+  <!-- Decisión 2 -->
+  <g class="t">
+    <rect x="150" y="230" width="360" height="58" rx="29" fill="#1e293b" stroke="#64748b" stroke-width="2"/>
+    <text x="330" y="266" text-anchor="middle" class="tit" fill="#e2e8f0">¿Más de 30 mm/h?</text>
+  </g>
+  <path class="fl" d="M510 259 H588"/>
+  <text class="t peq" x="536" y="250" fill="#94a3b8">sí</text>
+  <path class="fl" d="M330 292 V334"/>
+  <text class="t peq" x="342" y="320" fill="#94a3b8">no</text>
+
+  <g class="t">
+    <rect x="592" y="220" width="188" height="78" rx="14" fill="#7c2d12" stroke="#f97316" stroke-width="2.5"/>
+    <text x="686" y="252" text-anchor="middle" class="tit" fill="#ffedd5">🟠 NARANJA</text>
+    <text x="686" y="278" text-anchor="middle" class="sub" fill="#fed7aa">muy fuerte</text>
+  </g>
+
+  <!-- Decisión 3 -->
+  <g class="t">
+    <rect x="150" y="338" width="360" height="78" rx="39" fill="#1e293b" stroke="#64748b" stroke-width="2"/>
+    <text x="330" y="368" text-anchor="middle" class="tit" fill="#e2e8f0">¿Más de 60 mm</text>
+    <text x="330" y="396" text-anchor="middle" class="tit" fill="#e2e8f0">acumulados en 3 h?</text>
+  </g>
+  <path class="fl" d="M510 377 H588"/>
+  <text class="t peq" x="536" y="368" fill="#94a3b8">sí</text>
+  <path class="fl" d="M330 420 V462"/>
+  <text class="t peq" x="342" y="448" fill="#94a3b8">no</text>
+
+  <g class="t">
+    <rect x="592" y="338" width="188" height="78" rx="14" fill="#713f12" stroke="#eab308" stroke-width="2.5"/>
+    <text x="686" y="370" text-anchor="middle" class="tit" fill="#fef9c3">🟡 AMARILLO</text>
+    <text x="686" y="396" text-anchor="middle" class="sub" fill="#fef08a">terreno saturado</text>
+  </g>
+
+  <g class="t">
+    <rect x="150" y="466" width="360" height="52" rx="14" fill="#14532d" stroke="#22c55e" stroke-width="2"/>
+    <text x="330" y="499" text-anchor="middle" class="tit" fill="#dcfce7">Sin aviso propio</text>
+  </g>
+
+  <!-- Nota sobre el caso amarillo -->
+  <g class="t">
+    <rect x="20" y="544" width="760" height="58" rx="12" fill="#1c1917" stroke="#eab308" stroke-width="1.5" stroke-dasharray="5 4"/>
+    <text x="400" y="570" text-anchor="middle" class="sub" fill="#fde68a" font-weight="650">El caso amarillo es el que mata: ha escampado, la gente sale…</text>
+    <text x="400" y="592" text-anchor="middle" class="peq" fill="#d6d3d1">…y el agua sigue bajando desde la cabecera del río.</text>
+  </g>
+</svg>
