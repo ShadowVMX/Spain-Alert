@@ -1,7 +1,8 @@
 import { gunzipSync } from "node:zlib";
 import { extract } from "tar-stream";
 import { XMLParser } from "fast-xml-parser";
-import type { EarthquakeProperties, GeoFeature, GeoFeatureCollection, HazardKind, Severity, WeatherStationProperties } from "./types.js";
+import type { GeoFeature, GeoFeatureCollection, HazardKind, Severity, WeatherStationProperties } from "./types.js";
+import { classifyRain, classifyTrend } from "./rain.js";
 
 const AEMET_BASE = "https://opendata.aemet.es/opendata/api";
 
@@ -56,28 +57,85 @@ interface AemetObservacion {
 
 const msToKmh = (v: number | undefined) => (v === undefined ? null : Math.round(v * 3.6 * 10) / 10);
 
+// Máximo de estaciones a las que se les pide histórico por petición, para no agotar
+// el límite de peticiones/minuto de la API gratuita de AEMET (solo interesa el
+// detalle donde ya está lloviendo fuerte, no en las ~800 estaciones sin lluvia).
+const MAX_HISTORY_LOOKUPS = 40;
+const HISTORY_CANDIDATE_MM = 2;
+
+interface StationRainDetail {
+  sum3h: number;
+  tendencia: import("./rain.js").RainTrend | null;
+}
+
+async function fetchStationRainDetail(idema: string): Promise<StationRainDetail | null> {
+  try {
+    const { raw } = await fetchAemet(`/observacion/convencional/datos/estacion/${idema}`);
+    const historial = JSON.parse(raw.toString("utf-8")) as AemetObservacion[];
+    const ordenado = historial
+      .filter((h) => h.fint)
+      .sort((a, b) => new Date(a.fint).getTime() - new Date(b.fint).getTime());
+    if (ordenado.length === 0) return null;
+
+    const ultimoInstante = new Date(ordenado[ordenado.length - 1].fint).getTime();
+    const enUltimas3h = ordenado.filter((h) => ultimoInstante - new Date(h.fint).getTime() <= 3 * 60 * 60 * 1000);
+    const sum3h = Math.round(enUltimas3h.reduce((acc, h) => acc + (h.prec ?? 0), 0) * 10) / 10;
+
+    let tendencia: import("./rain.js").RainTrend | null = null;
+    if (ordenado.length >= 2) {
+      const ultima = ordenado[ordenado.length - 1].prec ?? 0;
+      const anterior = ordenado[ordenado.length - 2].prec ?? 0;
+      tendencia = classifyTrend(ultima, anterior);
+    }
+    return { sum3h, tendencia };
+  } catch {
+    return null; // una estación sin histórico disponible no debe tumbar el resto
+  }
+}
+
 export async function getWeatherStations(): Promise<GeoFeatureCollection<WeatherStationProperties>> {
   const { raw } = await fetchAemet("/observacion/convencional/todas");
   const observaciones = JSON.parse(raw.toString("utf-8")) as AemetObservacion[];
 
+  const candidatas = observaciones
+    .filter((o) => (o.prec ?? 0) >= HISTORY_CANDIDATE_MM)
+    .sort((a, b) => (b.prec ?? 0) - (a.prec ?? 0))
+    .slice(0, MAX_HISTORY_LOOKUPS)
+    .map((o) => o.idema);
+
+  const detalles = new Map<string, StationRainDetail>();
+  if (candidatas.length > 0) {
+    const resultados = await Promise.allSettled(candidatas.map((idema) => fetchStationRainDetail(idema)));
+    candidatas.forEach((idema, idx) => {
+      const r = resultados[idx];
+      if (r.status === "fulfilled" && r.value) detalles.set(idema, r.value);
+    });
+  }
+
   const features: GeoFeature<WeatherStationProperties>[] = observaciones
     .filter((o) => typeof o.lat === "number" && typeof o.lon === "number")
-    .map((o) => ({
-      type: "Feature",
-      geometry: { type: "Point", coordinates: [o.lon as number, o.lat as number] },
-      properties: {
-        id: o.idema,
-        nombre: o.ubi ?? o.idema,
-        provincia: o.prov ?? null,
-        fechaHora: o.fint,
-        precipitacion1h_mm: o.prec ?? null,
-        precipitacionAcumulada_mm: o.prec ?? null,
-        vientoVelocidad_kmh: msToKmh(o.vv),
-        vientoDireccion_grados: o.dv ?? null,
-        vientoRacha_kmh: msToKmh(o.vmax),
-        temperatura_c: o.ta ?? null,
-      },
-    }));
+    .map((o) => {
+      const detalle = detalles.get(o.idema);
+      return {
+        type: "Feature",
+        geometry: { type: "Point", coordinates: [o.lon as number, o.lat as number] },
+        properties: {
+          id: o.idema,
+          nombre: o.ubi ?? o.idema,
+          provincia: o.prov ?? null,
+          fechaHora: o.fint,
+          precipitacion1h_mm: o.prec ?? null,
+          precipitacionAcumulada_mm: o.prec ?? null,
+          intensidadLluvia: classifyRain(o.prec ?? 0),
+          lluvia3h_mm: detalle?.sum3h ?? null,
+          tendenciaLluvia: detalle?.tendencia ?? null,
+          vientoVelocidad_kmh: msToKmh(o.vv),
+          vientoDireccion_grados: o.dv ?? null,
+          vientoRacha_kmh: msToKmh(o.vmax),
+          temperatura_c: o.ta ?? null,
+        },
+      };
+    });
 
   return { type: "FeatureCollection", features, actualizado: new Date().toISOString() };
 }

@@ -4,12 +4,14 @@ import { Legend } from "./components/Legend";
 import { AlertBanner } from "./components/AlertBanner";
 import { useGeolocation } from "./hooks/useGeolocation";
 import { useNearbyAlerts } from "./hooks/useNearbyAlerts";
+import type { SaihCapa } from "./types";
 
 export default function App() {
   const [locationOn, setLocationOn] = useState(false);
   const [showWarnings, setShowWarnings] = useState(true);
   const [showStations, setShowStations] = useState(true);
   const [showQuakes, setShowQuakes] = useState(true);
+  const [saihLayers, setSaihLayers] = useState<SaihCapa[]>(["rios", "pluviometria"]);
   const [refreshKey, setRefreshKey] = useState(0);
 
   const geo = useGeolocation(locationOn);
@@ -50,6 +52,7 @@ export default function App() {
           showWarnings={showWarnings}
           showStations={showStations}
           showQuakes={showQuakes}
+          saihLayers={saihLayers}
           userPos={geo.lat && geo.lon ? { lat: geo.lat, lon: geo.lon } : null}
           refreshKey={refreshKey}
         />
@@ -57,11 +60,13 @@ export default function App() {
           showWarnings={showWarnings}
           showStations={showStations}
           showQuakes={showQuakes}
+          saihLayers={saihLayers}
           onToggle={(key) => {
             if (key === "showWarnings") setShowWarnings((v) => !v);
             if (key === "showStations") setShowStations((v) => !v);
             if (key === "showQuakes") setShowQuakes((v) => !v);
           }}
+          onToggleSaih={(capa) => setSaihLayers((prev) => (prev.includes(capa) ? prev.filter((c) => c !== capa) : [...prev, capa]))}
         />
       </main>
 

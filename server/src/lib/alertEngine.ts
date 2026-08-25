@@ -4,6 +4,7 @@ import { getRecentEarthquakes } from "./earthquakes.js";
 import { SAFETY_INSTRUCTIONS } from "./instructions.js";
 import type { HazardKind, Severity } from "./types.js";
 import { cached } from "./cache.js";
+import { RAIN_INTENSITY_LABEL } from "./rain.js";
 
 export interface NearbyAlert {
   tipo: HazardKind;
@@ -24,9 +25,14 @@ function earthquakeRadiusKm(magnitude: number): number {
   return 350;
 }
 
-// Umbral de lluvia torrencial (AEMET considera "torrencial" > 60 mm/h; avisamos ya en "muy fuerte" > 30 mm/h).
+// Umbrales según la escala oficial AEMET: avisamos ya en "muy fuerte" (30-60 mm/h);
+// "torrencial" (>60 mm/h) se trata como riesgo de riada inminente (rojo).
 const FLASH_FLOOD_MM_H = 30;
+const TORRENTIAL_MM_H = 60;
 const FLASH_FLOOD_RADIUS_KM = 12;
+// El terreno saturado por lluvia sostenida puede provocar crecidas río abajo incluso
+// si en este momento ya no está lloviendo con esa intensidad justo encima del usuario.
+const SATURATED_GROUND_3H_MM = 60;
 
 export async function getNearbyAlerts(lat: number, lon: number): Promise<NearbyAlert[]> {
   const userPoint = point([lon, lat]);
@@ -73,22 +79,52 @@ export async function getNearbyAlerts(lat: number, lon: number): Promise<NearbyA
     }
   }
 
-  const nearbyHeavyRain = stations.features.filter((f) => {
-    if ((f.properties.precipitacion1h_mm ?? 0) < FLASH_FLOOD_MM_H) return false;
-    const geom = f.geometry as GeoJSON.Point;
-    const d = turfDistance(userPoint, point(geom.coordinates as [number, number]), { units: "kilometers" });
-    return d <= FLASH_FLOOD_RADIUS_KM;
-  });
-  if (nearbyHeavyRain.length > 0 && !alerts.some((a) => a.tipo === "avenidas" || a.tipo === "lluvia")) {
-    const worst = nearbyHeavyRain.reduce((a, b) => ((a.properties.precipitacion1h_mm ?? 0) > (b.properties.precipitacion1h_mm ?? 0) ? a : b));
-    alerts.push({
-      tipo: "avenidas",
-      severidad: "naranja",
-      titulo: `Lluvia muy fuerte detectada cerca (${worst.properties.precipitacion1h_mm} mm/h en ${worst.properties.nombre}): riesgo de riada repentina`,
-      distancia_km: 0,
-      instrucciones: SAFETY_INSTRUCTIONS.avenidas,
-      fuente: "AEMET (estación automática, aviso no oficial)",
-    });
+  const yaHayAvisoDeLluvia = alerts.some((a) => a.tipo === "avenidas" || a.tipo === "lluvia");
+  if (!yaHayAvisoDeLluvia) {
+    const cercanas = stations.features
+      .map((f) => {
+        const geom = f.geometry as GeoJSON.Point;
+        const d = turfDistance(userPoint, point(geom.coordinates as [number, number]), { units: "kilometers" });
+        return { f, d };
+      })
+      .filter(({ d }) => d <= FLASH_FLOOD_RADIUS_KM);
+
+    const torrencial = cercanas.filter(({ f }) => (f.properties.precipitacion1h_mm ?? 0) >= TORRENTIAL_MM_H);
+    const muyFuerte = cercanas.filter(({ f }) => (f.properties.precipitacion1h_mm ?? 0) >= FLASH_FLOOD_MM_H);
+    const terrenoSaturado = cercanas.filter(({ f }) => (f.properties.lluvia3h_mm ?? 0) >= SATURATED_GROUND_3H_MM);
+
+    if (torrencial.length > 0) {
+      const worst = torrencial.reduce((a, b) => ((a.f.properties.precipitacion1h_mm ?? 0) > (b.f.properties.precipitacion1h_mm ?? 0) ? a : b)).f;
+      alerts.push({
+        tipo: "avenidas",
+        severidad: "rojo",
+        titulo: `Lluvia TORRENCIAL cerca de ti (${worst.properties.precipitacion1h_mm} mm/h en ${worst.properties.nombre}): riesgo MUY ALTO de riada repentina`,
+        distancia_km: 0,
+        instrucciones: SAFETY_INSTRUCTIONS.avenidas,
+        fuente: "AEMET (estación automática, aviso no oficial)",
+      });
+    } else if (muyFuerte.length > 0) {
+      const worst = muyFuerte.reduce((a, b) => ((a.f.properties.precipitacion1h_mm ?? 0) > (b.f.properties.precipitacion1h_mm ?? 0) ? a : b)).f;
+      const tendencia = worst.properties.tendenciaLluvia === "subiendo" ? " y sigue intensificándose" : "";
+      alerts.push({
+        tipo: "avenidas",
+        severidad: "naranja",
+        titulo: `Lluvia ${RAIN_INTENSITY_LABEL[worst.properties.intensidadLluvia].toLowerCase()} detectada cerca (${worst.properties.precipitacion1h_mm} mm/h en ${worst.properties.nombre})${tendencia}: riesgo de riada repentina`,
+        distancia_km: 0,
+        instrucciones: SAFETY_INSTRUCTIONS.avenidas,
+        fuente: "AEMET (estación automática, aviso no oficial)",
+      });
+    } else if (terrenoSaturado.length > 0) {
+      const worst = terrenoSaturado.reduce((a, b) => ((a.f.properties.lluvia3h_mm ?? 0) > (b.f.properties.lluvia3h_mm ?? 0) ? a : b)).f;
+      alerts.push({
+        tipo: "avenidas",
+        severidad: "amarillo",
+        titulo: `Terreno saturado por lluvia acumulada cerca de ti (${worst.properties.lluvia3h_mm} mm en 3h en ${worst.properties.nombre}): ríos y ramblas pueden seguir subiendo aunque ahora no llueva tan fuerte`,
+        distancia_km: 0,
+        instrucciones: SAFETY_INSTRUCTIONS.avenidas,
+        fuente: "AEMET (estación automática, aviso no oficial)",
+      });
+    }
   }
 
   return alerts;

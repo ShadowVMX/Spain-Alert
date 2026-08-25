@@ -9,6 +9,9 @@ export interface WeatherStationProperties {
   fechaHora: string;
   precipitacion1h_mm: number | null;
   precipitacionAcumulada_mm: number | null;
+  intensidadLluvia: import("./rain.js").RainIntensity;
+  lluvia3h_mm: number | null;
+  tendenciaLluvia: import("./rain.js").RainTrend | null;
   vientoVelocidad_kmh: number | null;
   vientoDireccion_grados: number | null;
   vientoRacha_kmh: number | null;

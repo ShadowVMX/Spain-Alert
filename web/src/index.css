@@ -103,6 +103,44 @@ body,
   font-size: 0.8rem;
 }
 
+.legend-divider {
+  border-top: 1px solid #334155;
+  margin: 0.25rem 0;
+}
+
+.legend-title {
+  margin: 0;
+  font-weight: 600;
+  color: var(--muted);
+  text-transform: uppercase;
+  font-size: 0.68rem;
+  letter-spacing: 0.03em;
+}
+
+.legend-note {
+  margin: 0;
+  font-size: 0.68rem;
+  color: var(--muted);
+}
+
+.rain-scale {
+  display: flex;
+  border-radius: 4px;
+  overflow: hidden;
+  height: 10px;
+}
+
+.rain-swatch {
+  flex: 1;
+}
+
+.rain-scale-labels {
+  display: flex;
+  justify-content: space-between;
+  font-size: 0.68rem;
+  color: var(--muted);
+}
+
 .load-error-banner {
   position: absolute;
   top: 0;

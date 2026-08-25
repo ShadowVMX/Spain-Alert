@@ -12,6 +12,27 @@ export type HazardKind =
 
 export type Severity = "verde" | "amarillo" | "naranja" | "rojo";
 
+export type RainIntensity = "sin_lluvia" | "debil" | "moderada" | "fuerte" | "muy_fuerte" | "torrencial";
+
+export const RAIN_INTENSITY_LABEL: Record<RainIntensity, string> = {
+  sin_lluvia: "Sin lluvia",
+  debil: "Débil",
+  moderada: "Moderada",
+  fuerte: "Fuerte",
+  muy_fuerte: "Muy fuerte",
+  torrencial: "Torrencial",
+};
+
+/** Colores en línea con la escala oficial AEMET de intensidad de precipitación. */
+export function rainIntensityColor(mmPorHora: number): string {
+  if (mmPorHora <= 0) return "#475569";
+  if (mmPorHora < 2) return "#38bdf8";
+  if (mmPorHora < 15) return "#0284c7";
+  if (mmPorHora < 30) return "#eab308";
+  if (mmPorHora < 60) return "#f97316";
+  return "#dc2626";
+}
+
 export interface WeatherStationProperties {
   id: string;
   nombre: string;
@@ -19,6 +40,9 @@ export interface WeatherStationProperties {
   fechaHora: string;
   precipitacion1h_mm: number | null;
   precipitacionAcumulada_mm: number | null;
+  intensidadLluvia: RainIntensity;
+  lluvia3h_mm: number | null;
+  tendenciaLluvia: "subiendo" | "estable" | "bajando" | null;
   vientoVelocidad_kmh: number | null;
   vientoDireccion_grados: number | null;
   vientoRacha_kmh: number | null;
@@ -83,6 +107,14 @@ export const HAZARD_LABEL: Record<HazardKind, string> = {
   avenidas: "Avenidas / riadas",
   terremoto: "Terremoto",
   otro: "Otro",
+};
+
+export type SaihCapa = "rios" | "embalses" | "pluviometria";
+
+export const SAIH_LABEL: Record<SaihCapa, string> = {
+  rios: "Ríos (caudal / nivel)",
+  embalses: "Embalses (nivel / volumen)",
+  pluviometria: "Pluviometría SAIH",
 };
 
 export const HAZARD_ICON: Record<HazardKind, string> = {

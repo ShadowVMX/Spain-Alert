@@ -2,8 +2,9 @@ import { useEffect, useState } from "react";
 import { CircleMarker, GeoJSON, MapContainer, Popup, TileLayer } from "react-leaflet";
 import type { Layer } from "leaflet";
 import { fetchEarthquakes, fetchStations, fetchWarnings } from "../api";
-import { HAZARD_LABEL, SEVERITY_COLOR } from "../types";
-import type { EarthquakeProperties, GeoFeatureCollection, WarningProperties, WeatherStationProperties } from "../types";
+import { HAZARD_LABEL, RAIN_INTENSITY_LABEL, SEVERITY_COLOR, rainIntensityColor } from "../types";
+import type { EarthquakeProperties, GeoFeatureCollection, SaihCapa, WarningProperties, WeatherStationProperties } from "../types";
+import { SaihLayer } from "./SaihLayer";
 
 const SPAIN_CENTER: [number, number] = [40.2, -3.7];
 
@@ -11,11 +12,12 @@ interface Props {
   showWarnings: boolean;
   showStations: boolean;
   showQuakes: boolean;
+  saihLayers: SaihCapa[];
   userPos: { lat: number; lon: number } | null;
   refreshKey: number;
 }
 
-export function MapView({ showWarnings, showStations, showQuakes, userPos, refreshKey }: Props) {
+export function MapView({ showWarnings, showStations, showQuakes, saihLayers, userPos, refreshKey }: Props) {
   const [warnings, setWarnings] = useState<GeoFeatureCollection<WarningProperties> | null>(null);
   const [stations, setStations] = useState<GeoFeatureCollection<WeatherStationProperties> | null>(null);
   const [quakes, setQuakes] = useState<GeoFeatureCollection<EarthquakeProperties> | null>(null);
@@ -49,6 +51,10 @@ export function MapView({ showWarnings, showStations, showQuakes, userPos, refre
           url="https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png"
         />
 
+        {saihLayers.map((capa) => (
+          <SaihLayer key={capa} capa={capa} />
+        ))}
+
         {showWarnings &&
           warnings?.features.map((f) => (
             <GeoJSON
@@ -66,21 +72,27 @@ export function MapView({ showWarnings, showStations, showQuakes, userPos, refre
         {showStations &&
           stations?.features.map((f) => {
             const rain = f.properties.precipitacion1h_mm ?? 0;
-            const wind = f.properties.vientoRacha_kmh ?? 0;
-            const intense = rain >= 15 || wind >= 70;
+            const color = rainIntensityColor(rain);
             const geom = f.geometry as GeoJSON.Point;
             return (
               <CircleMarker
                 key={f.properties.id}
                 center={[geom.coordinates[1], geom.coordinates[0]]}
-                radius={intense ? 7 : 4}
-                pathOptions={{ color: intense ? "#dc2626" : "#0284c7", fillOpacity: 0.7 }}
+                radius={rain >= 15 ? 7 : rain > 0 ? 5 : 4}
+                pathOptions={{ color, fillOpacity: 0.75 }}
               >
                 <Popup>
                   <strong>{f.properties.nombre}</strong>
                   <br />
-                  Lluvia (1h): {f.properties.precipitacion1h_mm ?? "s/d"} mm
+                  Lluvia (última hora): {f.properties.precipitacion1h_mm ?? "s/d"} mm — {RAIN_INTENSITY_LABEL[f.properties.intensidadLluvia]}
                   <br />
+                  {f.properties.lluvia3h_mm !== null && (
+                    <>
+                      Acumulado 3h: {f.properties.lluvia3h_mm} mm
+                      {f.properties.tendenciaLluvia && ` (${f.properties.tendenciaLluvia})`}
+                      <br />
+                    </>
+                  )}
                   Viento: {f.properties.vientoVelocidad_kmh ?? "s/d"} km/h (racha {f.properties.vientoRacha_kmh ?? "s/d"} km/h)
                   <br />
                   Temperatura: {f.properties.temperatura_c ?? "s/d"} °C
