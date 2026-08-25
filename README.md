@@ -63,29 +63,9 @@ Se puede **instalar como app**: en el navegador, "Añadir a pantalla de inicio".
 
 ## De dónde salen los datos
 
-```mermaid
-flowchart LR
-    A["🌦️ AEMET OpenData<br/>avisos + 800 estaciones"] --> D
-    B["🌊 SAIH / MITECO<br/>ríos y embalses"] --> D
-    C["🌍 EMSC<br/>terremotos"] --> D
-    D["⚙️ Descargador<br/>normaliza a GeoJSON"] --> E["📦 Datos publicados"]
-    E --> F["🗺️ Mapa en tu navegador"]
-    G["🌧️ RainViewer<br/>radar animado"] --> F
-    F --> H{"¿Te afecta<br/>algo?"}
-    H -->|sí| I["🚨 Sirena + aviso<br/>+ qué hacer"]
-    H -->|no| J["😌 Sigues informado"]
-
-    style A fill:#1e3a5f,stroke:#38bdf8,color:#e2e8f0
-    style B fill:#164e4a,stroke:#22d3ee,color:#e2e8f0
-    style C fill:#3b2f5e,stroke:#a78bfa,color:#e2e8f0
-    style G fill:#1e3a5f,stroke:#38bdf8,color:#e2e8f0
-    style D fill:#1e293b,stroke:#64748b,color:#e2e8f0
-    style E fill:#1e293b,stroke:#64748b,color:#e2e8f0
-    style F fill:#334155,stroke:#94a3b8,color:#f1f5f9
-    style H fill:#422006,stroke:#f59e0b,color:#fde68a
-    style I fill:#7f1d1d,stroke:#ef4444,color:#fee2e2
-    style J fill:#14532d,stroke:#22c55e,color:#dcfce7
-```
+<p align="center">
+  <img src="docs/img/flujo-datos.svg" alt="Flujo de datos: de las fuentes oficiales al aviso en tu móvil" width="100%">
+</p>
 
 | Capa | Fuente | Actualización | Estado |
 |---|---|---|---|
@@ -100,25 +80,9 @@ flowchart LR
 
 Además de los avisos oficiales, la app calcula el suyo desde las estaciones cercanas:
 
-```mermaid
-flowchart TD
-    S["Estaciones a menos de 12 km"] --> T{"¿Llueve más<br/>de 60 mm/h?"}
-    T -->|sí| R["🔴 ROJO<br/>Lluvia torrencial<br/>Riada posible en minutos"]
-    T -->|no| U{"¿Más de<br/>30 mm/h?"}
-    U -->|sí| N["🟠 NARANJA<br/>Lluvia muy fuerte<br/>Avisa si además va a más"]
-    U -->|no| V{"¿Más de 60 mm<br/>acumulados en 3 h?"}
-    V -->|sí| A["🟡 AMARILLO<br/>Terreno saturado<br/>Los ríos siguen subiendo"]
-    V -->|no| Z["Sin aviso propio"]
-
-    style R fill:#7f1d1d,stroke:#ef4444,color:#fee2e2
-    style N fill:#7c2d12,stroke:#f97316,color:#ffedd5
-    style A fill:#713f12,stroke:#eab308,color:#fef9c3
-    style Z fill:#14532d,stroke:#22c55e,color:#dcfce7
-    style S fill:#1e293b,stroke:#64748b,color:#e2e8f0
-    style T fill:#1e293b,stroke:#64748b,color:#e2e8f0
-    style U fill:#1e293b,stroke:#64748b,color:#e2e8f0
-    style V fill:#1e293b,stroke:#64748b,color:#e2e8f0
-```
+<p align="center">
+  <img src="docs/img/riada.svg" alt="Cómo se decide el aviso propio de riada" width="100%">
+</p>
 
 **El caso amarillo es el que mata.** La gente ve que ha escampado, se confía y sale
 —mientras el agua sigue bajando desde la cabecera del río. Por eso avisamos aunque
@@ -196,25 +160,9 @@ GitHub Pages solo sirve archivos estáticos y no puede ejecutar Node. La soluci�
 la clave guardada como *secret*, los deja como JSON y publica la web. La clave nunca
 llega al navegador.
 
-```mermaid
-flowchart LR
-    A["⏰ Cada 10 min"] --> B["🤖 GitHub Actions"]
-    K["🔑 Secret<br/>AEMET_API_KEY"] -.-> B
-    B --> C["📥 Descarga<br/>AEMET · EMSC · SAIH"]
-    C --> D{"¿Hay datos<br/>de lluvia?"}
-    D -->|sí| E["🚀 Publica en Pages"]
-    D -->|no| F["🛑 Aborta y avisa por email<br/>Pages mantiene lo último bueno"]
-    E --> G["🌍 tu-usuario.github.io"]
-
-    style A fill:#1e293b,stroke:#64748b,color:#e2e8f0
-    style B fill:#1e3a5f,stroke:#38bdf8,color:#e2e8f0
-    style K fill:#422006,stroke:#f59e0b,color:#fde68a
-    style C fill:#1e293b,stroke:#64748b,color:#e2e8f0
-    style D fill:#1e293b,stroke:#64748b,color:#e2e8f0
-    style E fill:#14532d,stroke:#22c55e,color:#dcfce7
-    style F fill:#7f1d1d,stroke:#ef4444,color:#fee2e2
-    style G fill:#334155,stroke:#94a3b8,color:#f1f5f9
-```
+<p align="center">
+  <img src="docs/img/despliegue.svg" alt="Ciclo de publicación en GitHub Pages" width="100%">
+</p>
 
 **⚠️ El repositorio tiene que ser público:**
 

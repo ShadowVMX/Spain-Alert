@@ -1,0 +1,77 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 800 640" width="800" height="640" role="img" aria-label="Ciclo de publicación: GitHub Actions descarga los datos cada 10 minutos y publica en Pages">
+  <defs>
+    <marker id="fl3" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse">
+      <path d="M0 0L10 5L0 10z" fill="#64748b"/>
+    </marker>
+    <style>
+      .t { font-family: system-ui, -apple-system, "Segoe UI", Roboto, sans-serif; }
+      .tit { font-size: 23px; font-weight: 650; }
+      .sub { font-size: 18px; }
+      .peq { font-size: 16px; }
+      .fl { stroke: #64748b; stroke-width: 2.5; fill: none; marker-end: url(#fl3); }
+    </style>
+  </defs>
+
+  <rect width="800" height="640" fill="#070b14"/>
+
+  <g class="t">
+    <rect x="260" y="20" width="280" height="56" rx="14" fill="#1e293b" stroke="#64748b" stroke-width="2"/>
+    <text x="400" y="55" text-anchor="middle" class="tit" fill="#f1f5f9">⏰ Cada 10 minutos</text>
+  </g>
+  <path class="fl" d="M400 80 V120"/>
+
+  <g class="t">
+    <rect x="260" y="124" width="280" height="56" rx="14" fill="#1e3a5f" stroke="#38bdf8" stroke-width="2"/>
+    <text x="400" y="159" text-anchor="middle" class="tit" fill="#e0f2fe">🤖 GitHub Actions</text>
+  </g>
+
+  <!-- Secret entra de lado -->
+  <g class="t">
+    <rect x="574" y="120" width="206" height="64" rx="14" fill="#422006" stroke="#f59e0b" stroke-width="2"/>
+    <text x="677" y="147" text-anchor="middle" class="sub" fill="#fde68a" font-weight="650">🔑 Secret</text>
+    <text x="677" y="171" text-anchor="middle" class="peq" fill="#fcd34d">AEMET_API_KEY</text>
+  </g>
+  <path d="M570 152 H548" stroke="#f59e0b" stroke-width="2.5" stroke-dasharray="6 4" fill="none" marker-end="url(#fl3)"/>
+
+  <path class="fl" d="M400 184 V224"/>
+
+  <g class="t">
+    <rect x="212" y="228" width="376" height="76" rx="14" fill="#1e293b" stroke="#64748b" stroke-width="2"/>
+    <text x="400" y="260" text-anchor="middle" class="tit" fill="#f1f5f9">📥 Descarga los datos</text>
+    <text x="400" y="288" text-anchor="middle" class="sub" fill="#94a3b8">AEMET · EMSC · SAIH</text>
+  </g>
+  <path class="fl" d="M400 308 V350"/>
+
+  <g class="t">
+    <rect x="238" y="354" width="324" height="62" rx="31" fill="#422006" stroke="#f59e0b" stroke-width="2.5"/>
+    <text x="400" y="393" text-anchor="middle" class="tit" fill="#fde68a">¿Hay datos de lluvia?</text>
+  </g>
+
+  <path class="fl" d="M238 385 H140 V444"/>
+  <text class="t peq" x="176" y="376" fill="#94a3b8">sí</text>
+  <path class="fl" d="M562 385 H660 V444"/>
+  <text class="t peq" x="600" y="376" fill="#94a3b8">no</text>
+
+  <g class="t">
+    <rect x="20" y="448" width="240" height="76" rx="14" fill="#14532d" stroke="#22c55e" stroke-width="2.5"/>
+    <text x="140" y="480" text-anchor="middle" class="tit" fill="#dcfce7">🚀 Publica</text>
+    <text x="140" y="506" text-anchor="middle" class="sub" fill="#bbf7d0">en Pages</text>
+
+    <rect x="540" y="448" width="240" height="76" rx="14" fill="#7f1d1d" stroke="#ef4444" stroke-width="2.5"/>
+    <text x="660" y="480" text-anchor="middle" class="tit" fill="#fee2e2">🛑 Aborta</text>
+    <text x="660" y="506" text-anchor="middle" class="sub" fill="#fecaca">y avisa por email</text>
+  </g>
+
+  <path class="fl" d="M140 528 V572"/>
+
+  <g class="t">
+    <rect x="20" y="576" width="240" height="52" rx="14" fill="#334155" stroke="#94a3b8" stroke-width="2"/>
+    <text x="140" y="609" text-anchor="middle" class="sub" fill="#f8fafc" font-weight="650">🌍 La app, actualizada</text>
+  </g>
+
+  <g class="t">
+    <rect x="452" y="576" width="328" height="52" rx="14" fill="#1c1917" stroke="#ef4444" stroke-width="1.5" stroke-dasharray="5 4"/>
+    <text x="616" y="599" text-anchor="middle" class="peq" fill="#fca5a5" font-weight="650">Pages mantiene lo último bueno:</text>
+    <text x="616" y="619" text-anchor="middle" class="peq" fill="#d6d3d1">nunca se publica un mapa vacío</text>
+  </g>
+</svg>
