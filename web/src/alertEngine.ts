@@ -32,6 +32,18 @@ const SATURATED_GROUND_3H_MM = 60;
 
 const UNA_HORA_MS = 60 * 60 * 1000;
 
+// Una estación que deja de reportar se queda con su última lectura congelada. Si esa
+// lectura era de lluvia torrencial, seguiría disparando avisos indefinidamente. Solo
+// contamos lecturas recientes: es preferible perder una estación caída que inundar
+// de falsas alarmas a quien tenga la app abierta.
+const LECTURA_MAX_ANTIGUEDAD_MS = 2 * UNA_HORA_MS;
+
+function esReciente(fechaHora: string): boolean {
+  const t = new Date(fechaHora).getTime();
+  if (Number.isNaN(t)) return false;
+  return Date.now() - t <= LECTURA_MAX_ANTIGUEDAD_MS;
+}
+
 export interface Datos {
   avisos: GeoFeatureCollection<WarningProperties> | null;
   estaciones: GeoFeatureCollection<WeatherStationProperties> | null;
@@ -80,6 +92,7 @@ export function calcularAlertasCercanas(lat: number, lon: number, datos: Datos):
   const yaHayAvisoDeLluvia = alerts.some((a) => a.tipo === "avenidas" || a.tipo === "lluvia");
   if (!yaHayAvisoDeLluvia) {
     const cercanas = (datos.estaciones?.features ?? [])
+      .filter((f) => esReciente(f.properties.fechaHora))
       .map((f) => {
         const geom = f.geometry as GeoJSON.Point;
         return { f, d: distance(userPoint, point(geom.coordinates as [number, number]), { units: "kilometers" }) };
