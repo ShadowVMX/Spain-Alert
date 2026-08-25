@@ -1,11 +1,15 @@
 import { useEffect, useState } from "react";
 import { MapView } from "./components/MapView";
-import { Legend } from "./components/Legend";
+import { TopBar } from "./components/TopBar";
+import { ControlPanel } from "./components/ControlPanel";
+import type { CapasVisibles } from "./components/ControlPanel";
+import { RadarTimeline } from "./components/RadarTimeline";
 import { AlertBanner } from "./components/AlertBanner";
 import { StaleBanner } from "./components/StaleBanner";
 import { useGeolocation } from "./hooks/useGeolocation";
 import { useHazardData } from "./hooks/useHazardData";
 import { useNearbyAlerts } from "./hooks/useNearbyAlerts";
+import { useRadarFrames } from "./hooks/useRadarFrames";
 import type { SaihCapa } from "./types";
 
 // Los datos se regeneran cada ~10 min en origen; refrescamos con esa cadencia.
@@ -13,15 +17,24 @@ const REFRESCO_MS = 5 * 60 * 1000;
 
 export default function App() {
   const [locationOn, setLocationOn] = useState(false);
-  const [showWarnings, setShowWarnings] = useState(true);
-  const [showStations, setShowStations] = useState(true);
-  const [showQuakes, setShowQuakes] = useState(true);
-  const [saihLayers, setSaihLayers] = useState<SaihCapa[]>(["rios", "pluviometria"]);
+  const [capas, setCapas] = useState<CapasVisibles>({ radar: true, avisos: true, estaciones: true, terremotos: false });
+  const [saihLayers, setSaihLayers] = useState<SaihCapa[]>([]);
   const [refreshKey, setRefreshKey] = useState(0);
 
+  const [indiceRadar, setIndiceRadar] = useState(0);
+  const [reproduciendo, setReproduciendo] = useState(true);
+  const [opacidadRadar, setOpacidadRadar] = useState(0.75);
+
   const datos = useHazardData(refreshKey);
+  const radar = useRadarFrames(refreshKey);
   const geo = useGeolocation(locationOn);
   const { alerts } = useNearbyAlerts(geo.lat, geo.lon, datos);
+
+  // Al cargar el radar, arrancamos en el último frame observado (el "ahora"),
+  // que es lo que la gente espera ver al abrir la app.
+  useEffect(() => {
+    if (radar.ultimoObservado >= 0) setIndiceRadar(radar.ultimoObservado);
+  }, [radar.ultimoObservado]);
 
   useEffect(() => {
     const id = setInterval(() => setRefreshKey((k) => k + 1), REFRESCO_MS);
@@ -37,59 +50,60 @@ export default function App() {
 
   return (
     <div className="app">
-      <header className="topbar">
-        <h1>🚨 Alerta España</h1>
-        <p className="tagline">Mapa nacional de riesgos en tiempo real: lluvia, DANA, riadas, viento y terremotos.</p>
-        <div className="controls">
-          {!locationOn ? (
-            <button className="btn-primary" onClick={activarUbicacion}>
-              📍 Activar alertas por mi ubicación
-            </button>
-          ) : (
-            <span className="status-ok">
-              📍 Vigilando tu zona {geo.lat && geo.lon ? `(${geo.lat.toFixed(3)}, ${geo.lon.toFixed(3)})` : "…"}
-            </span>
-          )}
-          <button className="btn-secondary" onClick={() => setRefreshKey((k) => k + 1)} disabled={datos.cargando}>
-            {datos.cargando ? "⏳ Cargando…" : "🔄 Actualizar datos"}
-          </button>
-          {datos.actualizado && <span className="meta-text">Datos de {new Date(datos.actualizado).toLocaleString("es-ES")}</span>}
-        </div>
-        {geo.error && <p className="error-text">No se pudo obtener tu ubicación: {geo.error}</p>}
-      </header>
+      <MapView
+        datos={datos}
+        radar={radar}
+        indiceRadar={indiceRadar}
+        opacidadRadar={opacidadRadar}
+        capas={capas}
+        saihLayers={saihLayers}
+        userPos={geo.lat && geo.lon ? { lat: geo.lat, lon: geo.lon } : null}
+      />
 
-      <StaleBanner actualizado={datos.actualizado} />
+      <div className="capa-ui">
+        <TopBar
+          vigilando={locationOn && !geo.error}
+          posicion={geo.lat && geo.lon ? { lat: geo.lat, lon: geo.lon } : null}
+          actualizado={datos.actualizado}
+          cargando={datos.cargando}
+          nAvisos={datos.avisos?.features.length ?? 0}
+          onActivarUbicacion={activarUbicacion}
+          onRefrescar={() => setRefreshKey((k) => k + 1)}
+        />
 
-      <main className="map-wrap">
-        <MapView
-          datos={datos}
-          showWarnings={showWarnings}
-          showStations={showStations}
-          showQuakes={showQuakes}
+        <StaleBanner actualizado={datos.actualizado} />
+        {geo.error && <div className="tira-error">No se pudo obtener tu ubicación: {geo.error}</div>}
+        {datos.error && <div className="tira-error">Algunas capas no cargaron: {datos.error}</div>}
+
+        <ControlPanel
+          capas={capas}
           saihLayers={saihLayers}
-          userPos={geo.lat && geo.lon ? { lat: geo.lat, lon: geo.lon } : null}
+          opacidadRadar={opacidadRadar}
+          onCapa={(clave) => setCapas((c) => ({ ...c, [clave]: !c[clave] }))}
+          onSaih={(capa) => setSaihLayers((prev) => (prev.includes(capa) ? prev.filter((c) => c !== capa) : [...prev, capa]))}
+          onOpacidadRadar={setOpacidadRadar}
         />
-        <Legend
-          showWarnings={showWarnings}
-          showStations={showStations}
-          showQuakes={showQuakes}
-          saihLayers={saihLayers}
-          onToggle={(key) => {
-            if (key === "showWarnings") setShowWarnings((v) => !v);
-            if (key === "showStations") setShowStations((v) => !v);
-            if (key === "showQuakes") setShowQuakes((v) => !v);
-          }}
-          onToggleSaih={(capa) => setSaihLayers((prev) => (prev.includes(capa) ? prev.filter((c) => c !== capa) : [...prev, capa]))}
-        />
-      </main>
+
+        {capas.radar && (
+          <RadarTimeline
+            radar={radar}
+            indice={indiceRadar}
+            reproduciendo={reproduciendo}
+            onIndice={setIndiceRadar}
+            onReproduciendo={setReproduciendo}
+          />
+        )}
+
+        <footer className="creditos">
+          AEMET · SAIH/MITECO · EMSC ·{" "}
+          <a href="https://www.rainviewer.com/" target="_blank" rel="noreferrer">
+            RainViewer
+          </a>{" "}
+          — Tu ubicación se procesa en tu dispositivo. No sustituye a Protección Civil: en emergencia, 112.
+        </footer>
+      </div>
 
       <AlertBanner alerts={alerts} />
-
-      <footer className="footer">
-        Fuentes: AEMET OpenData (avisos y estaciones), SAIH/MITECO (ríos y embalses), EMSC (terremotos). Tu ubicación se
-        procesa en tu dispositivo y no se envía a ningún servidor. No sustituye a los avisos oficiales de Protección Civil
-        — en una emergencia llama al 112.
-      </footer>
     </div>
   );
 }

@@ -1,260 +1,305 @@
-# Alerta España 🚨
+# 🚨 Alerta España
 
-Mapa nacional en tiempo real de riesgos naturales, con **alertas automáticas por
-proximidad**: si detecta que un fenómeno peligroso se acerca a tu ubicación, te
-avisa al instante con instrucciones de autoprotección específicas.
+**Mapa nacional de riesgos naturales en tiempo real, con alertas automáticas por
+proximidad.** Si un fenómeno peligroso se acerca a donde estás, la app te avisa al
+instante con instrucciones concretas de qué hacer.
 
-**Foco actual del proyecto: lluvia, DANA y riadas** (es la causa de muerte evitable
-más frecuente en España por fenómeno natural — de ahí la prioridad). Terremotos
-tiene una integración básica ya funcionando; viento se apoya en los mismos avisos
-AEMET que la lluvia. Ampliar viento y terremotos con más detalle queda para más
-adelante, cuando lluvia esté lo más completa posible.
+El foco es **la lluvia**: DANAs, lluvias torrenciales y riadas. Es el fenómeno
+natural que más muertes evitables causa en España, y la mayoría ocurren por no
+saber a tiempo que el agua venía.
 
-No sustituye a Protección Civil ni a los canales oficiales de emergencias (112):
-es una capa adicional, más rápida y más visual, pensada para que nadie se quede sin
-enterarse a tiempo.
+> No sustituye a Protección Civil ni al 112. Es una capa adicional, más rápida y
+> más visual, para que nadie se quede sin enterarse.
 
-> **Estado: código listo, pendiente de activar el despliegue.** El repositorio ya
-> trae todo lo necesario para publicarse solo en GitHub Pages, pero hace falta dar
-> tres clics en la configuración del repo (hacerlo público, guardar la clave de
-> AEMET y activar Pages) — ver [Puesta en marcha](#puesta-en-marcha).
+---
 
-## Arquitectura
+## Qué hace
 
-```
-server/   Node/Express (TypeScript) — descarga y normaliza los datos oficiales
-web/      App web (Vite + React + Leaflet) — mapa, capas y alertas por geolocalización
-.github/  Workflow que hace de "servidor por lotes" para el despliegue en Pages
-```
+- **Radar de lluvia animado** sobre el mapa: las últimas 2 horas más una predicción
+  a corto plazo. Le das al play y ves la tormenta moverse, así que sabes si viene
+  hacia ti o se aleja.
+- **Avisos oficiales de AEMET** dibujados como zonas de colores según su gravedad
+  (amarillo / naranja / rojo).
+- **~800 estaciones de medición** en toda España, coloreadas por intensidad de
+  lluvia según la escala oficial de AEMET.
+- **Ríos y embalses (SAIH)** de todas las confederaciones hidrográficas.
+- **Terremotos recientes** de la red sísmica.
+- **Alerta por proximidad**: activas tu ubicación y, si entras en zona de aviso o
+  se detecta lluvia peligrosa cerca, salta una sirena, una notificación y una
+  ficha a pantalla completa con las instrucciones de autoprotección.
 
-La app funciona en **dos modos**, con el mismo código:
+**Tu ubicación nunca sale de tu dispositivo.** El cálculo de qué te afecta se hace
+en tu propio móvil, no en un servidor.
 
-- **Estático** (GitHub Pages): GitHub Actions ejecuta el descargador cada 10 min y
-  deja los datos como archivos JSON. No hay servidor en marcha.
-- **Con servidor** (Docker): el backend descarga los datos en vivo en cada consulta.
+---
 
-En ambos casos la clave de AEMET vive solo en el lado del servidor/runner y nunca
-llega al navegador, y las respuestas se normalizan a GeoJSON con un formato común.
+## Cómo se usa
 
-**Las alertas se calculan en el navegador** (`web/src/alertEngine.ts`), no en el
-servidor. Además de permitir el modo estático, esto significa que la ubicación del
-usuario nunca sale de su dispositivo.
+1. Abres la web. Ves el mapa de España con el radar en marcha.
+2. **▶ en la barra inferior**: reproduce la animación del radar. La marca amarilla
+   de la barra separa lo ya observado de la predicción.
+3. **☰ Capas** (arriba a la derecha): enciendes y apagas radar, avisos, estaciones,
+   ríos, embalses y terremotos. También ajustas la opacidad del radar.
+4. **📍 Vigilar mi zona**: da permiso de ubicación y notificaciones. A partir de ahí
+   la app comprueba tu entorno cada vez que te mueves y cada pocos minutos.
+5. Tocando cualquier punto del mapa se abre su detalle (lluvia acumulada, viento,
+   temperatura, magnitud del sismo, etc.).
 
-### Fuentes de datos integradas ahora mismo
+Se puede **instalar como app** en el móvil: en el navegador, "Añadir a pantalla de
+inicio".
 
-| Capa | Fuente | Qué da | Frecuencia | Estado |
-|---|---|---|---|---|
-| Estaciones de lluvia y viento | [AEMET OpenData](https://opendata.aemet.es) — red de ~800 estaciones automáticas | precipitación (última hora + acumulado 3h + tendencia), intensidad según escala oficial AEMET, viento, racha, temperatura | ~10 min | ✅ integración estándar y bien documentada |
-| Avisos meteorológicos (DANA, lluvia torrencial, viento, costero, nieve, tormentas) | AEMET OpenData — avisos CAP oficiales | polígonos de zona afectada + severidad (amarillo/naranja/rojo) | ~5 min | ✅ integración estándar y bien documentada |
-| Ríos, embalses y pluviometría SAIH (**todas** las cuencas de España) | [MITECO — SAIH nacional (WMS)](https://www.miteco.gob.es/es/cartografia-y-sig/ide/descargas/agua/saih.html) | capa oficial visual (caudal/nivel de ríos, nivel/volumen de embalses, pluviometría) + detalle al hacer click | vivo (WMS) | ⚠️ capa visual añadida; **sin verificar en vivo** (ver nota abajo). No forma parte todavía del motor automático de alertas |
-| Terremotos | [EMSC](https://www.seismicportal.eu) (agrega la Red Sísmica Nacional del IGN) | magnitud, profundidad, epicentro, en tiempo casi real | ~2 min | ✅ integración básica funcionando |
-| Riesgo de riada repentina (heurística propia) | Cálculo propio sobre las estaciones AEMET | 3 niveles: lluvia torrencial (rojo), muy fuerte con tendencia (naranja), terreno saturado por acumulado de 3h aunque ya no llueva tan fuerte (amarillo) | en cada comprobación | ✅ |
+---
 
-### Cómo funciona la alerta por proximidad
+## De dónde salen los datos
 
-1. El usuario pulsa "Activar alertas por mi ubicación" (pide permiso de geolocalización y de notificaciones).
-2. El navegador manda su posición cada vez que cambia; la app pregunta a
-   `/api/alerts/nearby?lat=&lon=` cada 60 segundos.
-3. El backend comprueba:
-   - si el punto cae dentro de algún **polígono de aviso activo** (point-in-polygon),
-   - si hay un **terremoto reciente** a menos de un radio calculado según su magnitud,
-   - si hay **estaciones cercanas con lluvia intensa o terreno saturado** (posible riada repentina, en 3 niveles de severidad).
-4. Si hay coincidencia nueva: suena una sirena, salta una notificación del navegador
-   y aparece una tarjeta a pantalla completa con instrucciones de autoprotección
-   específicas (evacuar, no cruzar vados, protegerse de un terremoto, etc.).
+| Capa | Fuente | Actualización | Estado |
+|---|---|---|---|
+| Radar de lluvia animado | [RainViewer](https://www.rainviewer.com/) | ~10 min | ✅ integrado |
+| Avisos meteorológicos (CAP) | [AEMET OpenData](https://opendata.aemet.es) | ~5 min | ✅ integrado |
+| Estaciones (lluvia, viento, temperatura) | AEMET OpenData | ~10 min | ✅ integrado |
+| Ríos, embalses y pluviometría | [SAIH / MITECO](https://www.miteco.gob.es/es/cartografia-y-sig/ide/descargas/agua/saih.html) (todas las cuencas) | en vivo (WMS) | ⚠️ capa visual, sin verificar en producción |
+| Terremotos | [EMSC](https://www.seismicportal.eu) (incluye la red del IGN) | ~2 min | ✅ integrado |
+| Mapa base | [CARTO](https://carto.com/attributions) + [OpenStreetMap](https://www.openstreetmap.org/copyright) | — | ✅ integrado |
 
-> Las capas de SAIH (ríos/embalses/pluviometría) se ven en el mapa y se pueden
-> consultar tocándolas, pero **no** disparan todavía alertas automáticas: primero
-> hay que confirmar en un despliegue real que el formato de respuesta es el
-> esperado (ver nota de verificación más abajo).
+### Detección propia de riesgo de riada
 
-## Puesta en marcha
+Además de los avisos oficiales, la app calcula su propio aviso a partir de las
+estaciones cercanas, en tres niveles:
 
-### Paso 0 (obligatorio): la clave de AEMET
+| Nivel | Cuándo salta | Por qué importa |
+|---|---|---|
+| 🔴 Rojo | Lluvia torrencial cerca (>60 mm/h) | Riada repentina posible en minutos |
+| 🟠 Naranja | Lluvia muy fuerte (>30 mm/h), y avisa si además va a más | Da margen antes del aviso oficial |
+| 🟡 Amarillo | Más de 60 mm acumulados en 3 h | El terreno está saturado: los ríos siguen subiendo **aunque ya no llueva fuerte** |
+
+Ese último caso es el que mata en las riadas: la gente ve que ha escampado y se
+confía, mientras el agua sigue bajando desde la cabecera.
+
+---
+
+## Instalación
+
+### Requisitos
+
+- [Node.js 20 o superior](https://nodejs.org)
+- Una clave gratuita de AEMET (ver abajo)
+
+### Paso 1 — Clave de AEMET
 
 Sin esto no hay datos de lluvia. Es gratis y tarda 5 minutos:
 
 1. Entra en https://opendata.aemet.es/centrodedescargas/altaUsuario
-2. Pon tu email → llega un correo de confirmación → confirmas → llega un
-   **segundo** correo con la clave (es una cadena larguísima, se copia entera).
-3. Guárdala. Según cómo despliegues va en `server/.env` o como *secret* del repo
-   (ver más abajo).
+2. Pon tu email → llega un correo de confirmación → confirmas → llega un **segundo**
+   correo con la clave (una cadena larguísima; se copia entera).
 
 > **⚠️ Las claves de AEMET caducan a los 3 meses.** Antes eran indefinidas, pero
-> AEMET cambió la política: las nuevas claves duran 90 días, y desde el
-> **15 de octubre de 2026** las antiguas sin fecha de caducidad dejan de funcionar
-> (devuelven 401). Renovarla es repetir el mismo trámite de arriba y actualizar el
-> secret.
+> AEMET cambió la política: ahora duran 90 días, y desde el **15 de octubre de 2026**
+> las antiguas sin fecha de caducidad dejan de funcionar (error 401). Renovarla es
+> repetir el mismo trámite.
 >
-> El proyecto está preparado para que esto no te pille por sorpresa:
-> - **Avisa con antelación**: el descargador lee la fecha de caducidad que la propia
->   clave lleva dentro y, cuando quedan menos de 14 días, deja un aviso destacado en
->   el resumen del workflow de Actions.
-> - **Falla ruidosamente, no en silencio**: si la clave caduca, el workflow **falla**
->   (y GitHub te manda un email) en lugar de publicar un mapa vacío. Pages sigue
->   sirviendo los últimos datos buenos.
-> - **La app lo dice en pantalla**: si los datos llevan más de 40 min sin
->   actualizarse aparece un aviso, y pasadas 3 horas se vuelve rojo y remite a los
->   avisos oficiales de AEMET.
->
-> Esto último no es paranoia: en una app de avisos, unos datos viejos son más
-> peligrosos que no tener datos, porque un mapa en calma hace creer que no hay peligro.
+> El proyecto está preparado para que eso no te pille por sorpresa: avisa 14 días
+> antes, falla ruidosamente si caduca (en vez de publicar un mapa vacío) y la propia
+> app enseña un aviso si los datos se quedan atrás. Ver
+> [Cómo falla](#cómo-falla-a-propósito).
 
-> La clave es personal. Nunca la subas a GitHub — `.env` ya está en `.gitignore`.
-> Como *secret* de GitHub sí es seguro: no aparece en el código publicado y GitHub
-> la censura incluso en los logs de los workflows.
+### Paso 2 — Instalar y arrancar
 
-### Opción A — GitHub Pages, gratis y sin servidor (recomendada)
+```bash
+git clone https://github.com/ShadowVMX/Spain-Alert.git
+cd Spain-Alert
 
-GitHub Pages solo sirve archivos estáticos, así que no puede ejecutar el servidor
-Node. La solución: **GitHub Actions hace de servidor por lotes**. Cada 10 minutos
-descarga los datos de AEMET/EMSC/SAIH con la clave guardada como secret, los deja
-como archivos JSON y publica la web. El navegador solo lee esos archivos.
+npm run install:all                    # instala server + web
 
-Efecto secundario muy bueno: como no hay backend, **el cálculo de alertas se hace
-en el propio dispositivo**, así que la ubicación del usuario no viaja a ningún sitio.
+cp server/.env.example server/.env     # y pega dentro tu AEMET_API_KEY
 
-**⚠️ El repositorio tiene que ser público.** En el plan gratuito de GitHub:
+npm run build                          # construye web y servidor
+npm start                              # -> http://localhost:8787
+```
+
+Un solo proceso sirve el mapa y la API.
+
+### Para desarrollar (con recarga automática)
+
+```bash
+npm run dev:server     # terminal 1 -> API en :8787
+npm run dev:web        # terminal 2 -> web en :5173
+```
+
+### Comandos disponibles
+
+| Comando | Qué hace |
+|---|---|
+| `npm run install:all` | Instala las dependencias de `server/` y `web/` |
+| `npm run build` | Construye la web y compila el servidor |
+| `npm start` | Arranca la app completa (web + API) |
+| `npm run dev:server` | Servidor en modo desarrollo |
+| `npm run dev:web` | Web en modo desarrollo |
+| `npm run typecheck` | Comprueba tipos en todo el proyecto |
+| `npm --prefix server run generar-datos` | Descarga los datos como archivos estáticos |
+
+---
+
+## Publicar la app
+
+### Opción A — GitHub Pages (gratis, recomendada)
+
+GitHub Pages solo sirve archivos estáticos y no puede ejecutar el servidor Node.
+La solución: **GitHub Actions hace de servidor por lotes**. Cada 10 minutos descarga
+los datos con la clave guardada como *secret*, los deja como archivos JSON y publica
+la web. La clave nunca llega al navegador.
+
+**⚠️ El repositorio tiene que ser público:**
 
 | | Repo público | Repo privado (plan Free) |
 |---|---|---|
 | GitHub Actions | gratis e ilimitado | 2.000 min/mes, después se paga |
 | GitHub Pages | gratis | ❌ no disponible |
 
-Con el cron cada 10 min son unos 8.600 min/mes: en público **0 €**, en privado
-rondaría los **50 $/mes** (y ni siquiera tendrías Pages sin GitHub Pro).
+Con el cron cada 10 min son unos 8.600 min/mes: en público **0 €**; en privado
+rondaría los **50 $/mes**, y ni siquiera tendrías Pages sin GitHub Pro.
 
 Pasos, todo desde la web de GitHub:
 
-1. **Hacer el repo público**
-   `Settings` → abajo del todo, `Danger Zone` → `Change visibility` → `Public`.
-2. **Guardar la clave de AEMET**
-   `Settings` → `Secrets and variables` → `Actions` → `New repository secret`
-   - Name: `AEMET_API_KEY`
-   - Secret: la clave que te mandó AEMET
-3. **Activar Pages**
-   `Settings` → `Pages` → en `Source` elige **GitHub Actions** (no "Deploy from a branch").
-4. **Lanzar el primer despliegue**
-   `Actions` → `Publicar en GitHub Pages` → `Run workflow`.
+1. **Hacer el repo público** → `Settings` → abajo del todo, `Danger Zone` →
+   `Change repository visibility` → `Public`.
+2. **Guardar la clave** → `Settings` → `Secrets and variables` → `Actions` →
+   `New repository secret`. Name: `AEMET_API_KEY`. Secret: tu clave.
+3. **Activar Pages** → `Settings` → `Pages` → en `Source`, elegir **GitHub Actions**.
+4. **Primer despliegue** → pestaña `Actions` → `Publicar en GitHub Pages` →
+   `Run workflow`.
 
-En 2-3 minutos estará en `https://shadowvmx.github.io/Spain-Alert/`, y a partir
-de ahí se actualiza solo cada 10 minutos.
+En 2-3 minutos estará en `https://<tu-usuario>.github.io/Spain-Alert/`, y a partir
+de ahí se actualiza solo.
 
-**Limitaciones honestas de este modo**, que conviene tener claras en una app de
-seguridad:
+**Limitaciones de este modo**, que conviene tener claras:
 
-- Los datos se refrescan cada ~10 min, y GitHub **puede retrasar** las ejecuciones
-  programadas cuando sus servidores van cargados. No es un sistema de tiempo real
-  garantizado. Para lluvia es aceptable (AEMET publica a ese mismo ritmo), pero si
-  esto llega a usarse en serio conviene mover la descarga de datos a un servidor
-  propio — el `Dockerfile` de la Opción C ya lo permite sin reescribir nada.
-- No hay notificaciones con la app cerrada (eso necesita backend, está en el roadmap).
-- La consulta de detalle al tocar una capa del SAIH no funciona sin backend (CORS);
+- Los datos se refrescan cada ~10 min y **GitHub puede retrasar** las ejecuciones
+  programadas cuando va cargado. No es tiempo real garantizado.
+- No hay notificaciones con la app cerrada (eso necesita servidor).
+- El detalle al tocar una capa del SAIH no funciona sin servidor (lo bloquea CORS);
   las capas sí se ven.
-- GitHub desactiva los workflows programados si el repo pasa 60 días sin actividad.
+- GitHub desactiva los cron si el repo pasa 60 días sin actividad.
 
-### Opción B — verlo funcionando en tu ordenador
+### Opción B — Servidor propio (datos en vivo)
 
-Necesitas [Node.js 20 o superior](https://nodejs.org). Desde la raíz del repo:
-
-```bash
-npm run install:all          # instala todo (server + web)
-
-cp server/.env.example server/.env
-# edita server/.env y pega tu AEMET_API_KEY
-
-npm run build                # construye la web y el servidor
-npm start                    # -> http://localhost:8787
-```
-
-Abre `http://localhost:8787` y ya está: un único proceso sirve el mapa y la API.
-
-¿Vas a tocar el código? Entonces mejor modo desarrollo, con recarga automática,
-en dos terminales:
-
-```bash
-npm run dev:server           # terminal 1
-npm run dev:web              # terminal 2 -> http://localhost:5173
-```
-
-### Opción C — hosting propio con el servidor Node (datos en vivo)
-
-El repo incluye un `Dockerfile` que empaqueta web + API en un solo servicio, así
-que vale casi cualquier hosting (Render, Railway, Fly.io, un VPS...). Es la opción
-a la que hay que pasar si la app se usa en serio: los datos se piden en vivo en cada
-consulta en lugar de cada 10 minutos. Lo único que tiene que configurar el hosting es:
-
-- la variable de entorno **`AEMET_API_KEY`** con tu clave,
-- el puerto, que se lee de **`PORT`** (la mayoría de hostings lo inyectan solos).
+Es el salto cuando la app se use en serio. Hay un `Dockerfile` que empaqueta web +
+API en un solo servicio; vale para Render, Railway, Fly.io o un VPS.
 
 ```bash
 docker build -t alerta-espana .
 docker run -p 8787:8787 -e AEMET_API_KEY=tu_clave alerta-espana
 ```
 
-**Importante para móvil:** la geolocalización y las notificaciones **solo
-funcionan bajo HTTPS** (o en `localhost`). Cualquiera de esos hostings te da
-HTTPS automático; si montas un VPS a mano, necesitas un certificado
-(Caddy o Let's Encrypt lo resuelven en un comando).
+Solo hay que configurar `AEMET_API_KEY` y, si el hosting lo pide, `PORT`.
 
-### Qué está probado y qué no
+> **Importante para móvil:** la geolocalización y las notificaciones **solo funcionan
+> bajo HTTPS** (o en `localhost`). Los hostings citados dan HTTPS automático.
 
-Lo verificado hasta ahora:
+---
 
-- Todo compila; el servidor arranca y sirve el mapa y la API en un solo puerto.
-- Cuando una fuente externa falla se devuelve un error controlado en vez de caerse,
-  y el resto de capas siguen funcionando.
-- **El motor de alertas se ha probado en un navegador real** (Chromium con
-  geolocalización simulada) contra un escenario sintético de DANA: estando en
-  Valencia con aviso rojo y 78 mm/h, salta la tarjeta de alerta con sus
-  instrucciones; estando en Madrid sin lluvia, no salta nada (sin falsas alarmas).
+## Arquitectura
 
-Lo **no** verificado: las llamadas reales a las fuentes de datos. El entorno
-donde se escribió este código bloquea las conexiones salientes a
-`opendata.aemet.es`, `seismicportal.eu` y `wms.mapama.gob.es`, así que la primera
-vez que este proyecto hable de verdad con AEMET será en tu despliegue. Concretando:
-> - **AEMET y EMSC** son APIs REST estándar y bien documentadas — deberían funcionar
->   sin cambios en cuanto pongas la API key de AEMET.
-> - **El WMS nacional del SAIH** (`server/src/lib/saih.ts`) se ha construido a partir
->   de búsquedas (URLs confirmadas: `wms.mapama.gob.es/sig/agua/saih/{rios,embalses,pluviometria}`,
->   WMS 1.3.0 perfil INSPIRE) pero no de documentación oficial verificada línea a
->   línea, así que **es lo primero que hay que comprobar al desplegar**: abre el
->   mapa, activa esas capas y mira si aparece algo. Si no carga nada, lo más
->   probable es que `GetCapabilities` devuelva un formato de `<Layer>` distinto al
->   que espera `discoverLayerName()` — es un único punto de fallo fácil de depurar
->   con las herramientas de red del navegador.
+```
+server/    Node + Express (TypeScript) — descarga y normaliza los datos oficiales
+  src/lib/         clientes de AEMET, EMSC y SAIH + motor de alertas de servidor
+  src/scripts/     generador de datos estáticos para el despliegue en Pages
+web/       Vite + React + Leaflet — el mapa y toda la interfaz
+  src/alertEngine.ts   cálculo de alertas EN EL NAVEGADOR
+.github/   workflow que descarga datos y publica en Pages
+```
 
-## Roadmap (lo iremos añadiendo "uno a uno")
+La app funciona en **dos modos con el mismo código**, elegidos al compilar con
+`VITE_DATA_MODE`:
 
-- **Verificar y explotar SAIH de verdad** — ahora mismo es solo una capa visual.
-  Si el WMS nacional funciona en producción, el siguiente paso natural es meter
-  el nivel/caudal de los ríos en el motor de alertas (`alertEngine.ts`): es la
-  señal más fiable de riada real, mejor que solo mirar lluvia. Si el WMS nacional
-  no da suficiente detalle, hay que ir cuenca a cuenca (Ebro, Júcar, Duero,
-  Cantábrico, Segura, Guadalquivir...), cada una con su propio sistema.
-- **Notificaciones push reales (con la app cerrada)** — ahora mismo la
-  notificación solo salta si la pestaña sigue abierta. Para avisar con el móvil
-  bloqueado hace falta un Service Worker con Push API + claves VAPID y guardar
-  las suscripciones de cada usuario en el backend.
-- **App instalable (PWA) → APK** — ya está el `manifest.webmanifest` y el
-  `sw.js` mínimo para que se pueda "Añadir a pantalla de inicio". Para la APK,
-  el camino más rápido es envolver esta misma web con
-  [Capacitor](https://capacitorjs.com/) o generar una Trusted Web Activity con
-  [Bubblewrap](https://github.com/GoogleChromeLabs/bubblewrap) — no hace falta
-  reescribir nada del mapa ni de la lógica de alertas.
-- **Incendios forestales** (EFFIS/Copernicus) y **alertas de Protección Civil**
-  (RSS/CAP de las CCAA, cuando lo publiquen) como capas adicionales.
-- **Historial y "modo tras la alerta"**: qué hacer cuando pasa el peligro,
-  puntos de encuentro, contacto con 112.
-- **Viento y terremotos, a futuro**: por ahora se quedan como están (avisos AEMET
-  de viento ya funcionan igual que los de lluvia; terremotos vía EMSC ya está
-  operativo). Cuando lluvia esté a punto, lo siguiente sería: radio de terremoto
-  más preciso (curvas de intensidad reales en vez de la heurística actual por
-  magnitud) y una capa específica de rachas de viento con umbrales por tipo de
-  vehículo/actividad.
+- **estático** → los datos son archivos JSON generados por Actions (GitHub Pages).
+- **api** → el backend los sirve en vivo (despliegue con Docker).
 
-## Aviso legal
+En ambos casos la clave de AEMET vive solo en el servidor o el runner, nunca en el
+navegador.
 
-Esta app usa fuentes públicas oficiales pero es un proyecto independiente, no
-gestionado por AEMET, el IGN ni Protección Civil. En una emergencia real, sigue
-siempre las indicaciones de las autoridades y llama al 112.
+**Las alertas se calculan en el cliente** (`web/src/alertEngine.ts`). Además de
+permitir el modo sin servidor, esto significa que la ubicación del usuario no se
+envía a ninguna parte.
+
+### Cómo funciona la alerta por proximidad
+
+1. El navegador vigila la posición con `watchPosition`.
+2. Con cada cambio de posición o de datos se recalcula localmente:
+   - si el punto cae dentro de algún **polígono de aviso activo**,
+   - si hay un **terremoto reciente** dentro de un radio según su magnitud,
+   - si hay **estaciones cercanas con lluvia intensa o terreno saturado**.
+3. Si aparece algo nuevo: sirena, notificación del navegador y ficha a pantalla
+   completa con instrucciones para ese fenómeno concreto.
+
+---
+
+## Cómo falla (a propósito)
+
+En una app de avisos, **unos datos viejos son más peligrosos que no tener datos**:
+un mapa en calma hace creer que no hay peligro. Por eso:
+
+- Si falla una fuente secundaria (terremotos, SAIH), se publica igual: mejor un mapa
+  con los avisos de lluvia que ningún mapa.
+- Si falla **toda** la información de lluvia, el despliegue se aborta. Al no
+  publicarse nada, Pages mantiene la última versión buena y GitHub avisa por email.
+- Si la clave de AEMET caduca o es inválida, se aborta siempre, con el mensaje de
+  qué hacer para renovarla.
+- El descargador lee la fecha de caducidad de la propia clave y avisa cuando quedan
+  menos de 14 días.
+- La app muestra una tira de aviso si los datos llevan más de 40 minutos sin
+  actualizarse, y en rojo pasadas 3 horas, remitiendo a los avisos oficiales.
+
+---
+
+## Qué está probado y qué no
+
+**Verificado:**
+
+- Todo compila y el servidor arranca sirviendo mapa y API en un solo puerto.
+- El motor de alertas, en un navegador real con geolocalización simulada: en
+  Valencia con aviso rojo y 78 mm/h salta la alerta con sus instrucciones; en Madrid
+  sin lluvia no salta nada (sin falsas alarmas).
+- La interfaz con 800 estaciones: ~56 fps haciendo zoom, sin errores de JavaScript y
+  sin desbordes en móvil (390 px).
+- La detección de clave caducada: avisa a 14 días, aborta con código de error si la
+  clave no vale.
+
+**No verificado todavía:** las llamadas reales a las fuentes. El entorno donde se
+escribió este código bloquea la salida a `opendata.aemet.es`, `seismicportal.eu`,
+`wms.mapama.gob.es`, `rainviewer.com` y los servidores de mapas, así que la primera
+vez que hable de verdad con AEMET será en tu despliegue. AEMET, EMSC y RainViewer
+son APIs estándar y documentadas; **el WMS del SAIH es el más incierto** y es lo
+primero que conviene mirar al desplegar.
+
+---
+
+## Roadmap
+
+- [ ] Meter el nivel de los ríos del SAIH en el motor de alertas (es la señal más
+      fiable de riada real, mejor que solo mirar la lluvia).
+- [ ] Notificaciones push con la app cerrada (Service Worker + VAPID + backend).
+- [ ] Empaquetar como APK con [Capacitor](https://capacitorjs.com/) o
+      [Bubblewrap](https://github.com/GoogleChromeLabs/bubblewrap): la web ya está
+      lista, no hay que reescribir el mapa ni las alertas.
+- [ ] Incendios forestales (EFFIS/Copernicus).
+- [ ] Avisos de Protección Civil de las CCAA.
+- [ ] Radar de más resolución para España usando el propio radar de AEMET.
+- [ ] Viento y terremotos con más detalle: radio sísmico basado en intensidad real
+      en lugar de la heurística por magnitud, y umbrales de racha por tipo de
+      vehículo o actividad.
+- [ ] "Modo tras la alerta": qué hacer cuando pasa el peligro.
+
+---
+
+## Licencia y avisos
+
+Proyecto independiente. No está gestionado ni respaldado por AEMET, el IGN, MITECO
+ni Protección Civil.
+
+Los datos son de sus respectivas fuentes y se usan bajo sus condiciones: AEMET y
+MITECO exigen citar la procedencia, y RainViewer requiere atribución visible (está
+en el pie de la app). El uso gratuito de RainViewer está pensado para proyectos
+pequeños; si esto creciera mucho, habría que hablar con ellos.
+
+**En una emergencia real, sigue siempre las indicaciones de las autoridades y llama
+al 112.**
