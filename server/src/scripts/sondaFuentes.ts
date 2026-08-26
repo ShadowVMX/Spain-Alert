@@ -28,75 +28,56 @@ interface Candidato {
   buscamos: string;
   url: string;
   headers?: Record<string, string>;
+  /** Caracteres de respuesta cruda a imprimir. Para cuando el resumen no basta y hay
+   *  que leer el HTML a mano para deducir por dónde pide los datos un visor. */
+  volcado?: number;
 }
 
 const CANDIDATOS: Candidato[] = [
-  // === RONDA 2 =============================================================
-  // La ronda 1 descartó lo que no existe y dejó tres pistas buenas. Esto va a por
-  // ellas.
+  // === RONDA 3 =============================================================
+  // Catalunya ya está integrada. Esto va a por las cuencas donde caen las DANAs
+  // y por las lecturas de Hidrosur, cuya geometría ya tenemos.
 
-  // --- ACA: hay un conjunto EN TIEMPO REAL ---------------------------------
-  // El catálogo lo destapó: junto al conjunto diario que ya usamos hay otro
-  // titulado "(dades en temps real)". Es justo lo que falta, porque un dato
-  // diario no sirve durante una DANA: el embalse cambia en horas.
+  // --- Júcar: el visor de la DANA de Valencia ------------------------------
+  // La raíz responde 200 con el visor entero, pero el extractor de rutas solo
+  // encontró librerías de CDN: la URL de datos la arma por trozos. Hay que leer
+  // el HTML y ver las llamadas con su contexto.
   {
-    grupo: "ACA tiempo real",
-    id: "vjx7-datos",
-    buscamos: "campos y coordenadas del conjunto en tiempo real",
-    url: "https://analisi.transparenciacatalunya.cat/resource/vjx7-6kcp.json?$limit=3",
+    grupo: "SAIH Júcar",
+    id: "visor-crudo",
+    buscamos: "cómo pide los datos el visor: la llamada, no solo la ruta",
+    url: "https://saih.chj.es/",
+    volcado: 2500,
   },
-  {
-    grupo: "ACA tiempo real",
-    id: "vjx7-metadatos",
-    buscamos: "cada cuánto se actualiza de verdad y cómo se llaman sus columnas",
-    url: "https://analisi.transparenciacatalunya.cat/api/views/vjx7-6kcp.json",
-  },
-  {
-    grupo: "ACA tiempo real",
-    id: "39c7-volum",
-    buscamos: "el otro conjunto de volumen por embalse, por si trae la capacidad",
-    url: "https://analisi.transparenciacatalunya.cat/resource/39c7-5ydt.json?$limit=3",
-  },
+  // Rutas plausibles para un Express. Cada 404 descarta una y cuesta un segundo.
+  { grupo: "SAIH Júcar", id: "datos", buscamos: "endpoint de datos", url: "https://saih.chj.es/datos" },
+  { grupo: "SAIH Júcar", id: "api", buscamos: "endpoint de datos", url: "https://saih.chj.es/api" },
+  { grupo: "SAIH Júcar", id: "estaciones", buscamos: "listado de estaciones con coordenadas", url: "https://saih.chj.es/estaciones" },
+  { grupo: "SAIH Júcar", id: "mapa", buscamos: "capa del mapa", url: "https://saih.chj.es/mapa" },
 
-  // --- Hidrosur (Andalucía): el visor sirve sus capas como JSON suelto ------
-  // El HTML del visor delataba las rutas. Si estos archivos son GeoJSON, ahí
-  // están las coordenadas de embalses y aforos de toda la cuenca mediterránea
-  // andaluza, sin clave y sin scraping.
+  // --- Ebro: agotó el tiempo de espera desde el runner ---------------------
+  // Puede ser el host, el TLS o un filtro. Probamos variantes para saber cuál.
+  { grupo: "SAIH Ebro", id: "sin-www", buscamos: "si el timeout era cosa del subdominio", url: "https://saihebro.com/" },
+  { grupo: "SAIH Ebro", id: "http-plano", buscamos: "si el problema es el TLS y no la red", url: "http://www.saihebro.com/" },
+  { grupo: "CH Ebro", id: "chebro", buscamos: "la confederación, por si publica aparte del SAIH", url: "https://www.chebro.es/" },
+
+  // --- Hidrosur: ya tenemos la geometría, faltan las LECTURAS --------------
+  // El visor delató estas dos rutas. Si alguna sirve valores por estación, se
+  // cruza con las capas GeoJSON que ya localizamos y entra Andalucía entera.
   {
     grupo: "Hidrosur",
-    id: "capa-embalses-punto",
-    buscamos: "embalses como puntos: nombre + coordenadas",
-    url: "https://www.redhidrosurmedioambiente.es/saih/assets/visorSAIH/capas/Embalses_pto.json",
-  },
-  {
-    grupo: "Hidrosur",
-    id: "capa-aforos",
-    buscamos: "aforos: el caudal del río es mejor señal de riada que la lluvia",
-    url: "https://www.redhidrosurmedioambiente.es/saih/assets/visorSAIH/capas/Aforos.json",
+    id: "parametros",
+    buscamos: "qué variables se pueden pedir y con qué códigos",
+    url: "https://www.redhidrosurmedioambiente.es/saih/datos/a/la/carta/parametros",
+    volcado: 1200,
   },
   {
     grupo: "Hidrosur",
-    id: "capa-pluviometricas",
-    buscamos: "pluviómetros de la red, más densos que los de AEMET en la zona",
-    url: "https://www.redhidrosurmedioambiente.es/saih/assets/visorSAIH/capas/Pluviometricas.json",
+    id: "csv-sin-argumentos",
+    buscamos: "qué argumentos exige el endpoint de descarga",
+    url: "https://www.redhidrosurmedioambiente.es/saih/datos/a/la/carta/csv",
+    volcado: 800,
   },
-  {
-    grupo: "Hidrosur",
-    id: "datos-a-la-carta",
-    buscamos: "el endpoint que sirve las LECTURAS, no solo la geometría",
-    url: "https://www.redhidrosurmedioambiente.es/saih/datos/a/la/carta",
-  },
-
-  // --- SAIH Júcar: el host vive, las rutas eran mías -----------------------
-  // Respondió "Cannot GET /chj/saih/": es un Express, así que el servidor está
-  // levantado y sirve otra cosa. Hay que encontrar qué.
-  { grupo: "SAIH Júcar", id: "raiz-dominio", buscamos: "el visor de verdad y las rutas que llame por dentro", url: "https://saih.chj.es/" },
-  { grupo: "SAIH Júcar", id: "chj", buscamos: "otro punto de entrada", url: "https://saih.chj.es/chj/" },
-
-  // --- MITECO: ver el directorio ArcGIS entero ----------------------------
-  // Respondió 200 con {currentVersion, folders, services} en 260 bytes, pero el
-  // resumen de la ronda 1 se comió justo los nombres. Ahora se vuelca literal.
-  { grupo: "MITECO", id: "arcgis-directorio", buscamos: "los nombres de las carpetas y servicios", url: "https://sig.mapama.gob.es/arcgis/rest/services?f=json" },
 ];
 
 // --- Resumen de la respuesta ------------------------------------------------
@@ -202,6 +183,20 @@ function resumirTexto(texto: string, tipo: string): string[] {
   } else {
     lineas.push(`  sin rutas de datos evidentes (${texto.length} bytes de HTML)`);
   }
+
+  // Las rutas sueltas no bastan cuando el visor arma la URL por trozos. Lo que
+  // hace falta ver es la LLAMADA con lo que tiene alrededor.
+  const llamadas = [
+    ...texto.slice(0, MAX_TEXTO_ESCANEADO).matchAll(/(fetch\s*\(|\$\.(?:get|post|ajax|getJSON)|axios\.\w+|XMLHttpRequest|\burl\s*:)/g),
+  ];
+  if (llamadas.length > 0) {
+    lineas.push(`  ${llamadas.length} llamadas a datos; contexto de las primeras:`);
+    for (const m of llamadas.slice(0, 8)) {
+      const desde = Math.max(0, (m.index ?? 0) - 40);
+      const trozo = texto.slice(desde, (m.index ?? 0) + 160).replace(/\s+/g, " ");
+      lineas.push(`    · …${trozo}…`);
+    }
+  }
   return lineas;
 }
 
@@ -233,6 +228,12 @@ async function sondear(c: Candidato): Promise<string[]> {
     lineas.push(...resumirJson(texto));
   } else {
     lineas.push(...resumirTexto(texto, tipo));
+  }
+
+  if (c.volcado) {
+    lineas.push(`  --- primeros ${c.volcado} caracteres en crudo ---`);
+    for (const l of texto.slice(0, c.volcado).split("\n")) lineas.push(`  | ${l}`);
+    lineas.push("  --- fin del volcado ---");
   }
 
   lineas.push("");
