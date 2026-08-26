@@ -1,21 +1,23 @@
 import type { GeoFeature, GeoFeatureCollection } from "./types.js";
 
 /**
- * Embalses: nivel de llenado por embalse, para saber cuánto margen le queda a la
- * cuenca antes de que una crecida vaya directa aguas abajo.
+ * Embalses en tiempo real.
  *
- * Este módulo se ha escrito sin poder probarlo: el entorno de desarrollo bloquea
- * la salida a los servidores de MITECO. Por eso NO da nada por supuesto sobre la
- * forma de los datos: descubre las colecciones disponibles, busca los campos por
- * nombre entre varias variantes, comprueba que lo que encuentra tiene sentido y
- * deja constancia en el log de todo lo que ve. Si no puede determinar con certeza
- * el volumen y la capacidad, no publica nada.
+ * En España no existe una única fuente nacional con el nivel de los embalses al
+ * momento. El Boletín Hidrológico de MITECO es nacional pero SEMANAL, y para una
+ * app de riadas eso no sirve: durante una DANA un embalse cambia en horas, no en
+ * semanas.
  *
- * Un embalse mal pintado o con un porcentaje inventado sería peor que no tenerlo:
- * daría una sensación de control que no existe.
+ * El dato al minuto vive en los SAIH de cada confederación, que son trece sistemas
+ * distintos. Por eso esto está montado como un registro de fuentes al que se van
+ * añadiendo cuencas una a una, y no como una integración única.
+ *
+ * Ninguna fuente da nada por supuesto: descubre los campos por nombre, comprueba
+ * que las coordenadas caen sobre España y que los números tienen sentido, y deja
+ * constancia en el log de lo que encuentra. Si no puede determinar el llenado con
+ * certeza, no publica ese embalse. Un porcentaje inventado sería peor que no tener
+ * la capa: daría una sensación de control que no existe.
  */
-
-const OGC_BASE = "https://wmts.mapama.gob.es/sig-api/ogc/features/v1";
 
 export type EstadoEmbalse = "verde" | "amarillo" | "rojo" | "desconocido";
 
@@ -28,12 +30,13 @@ export interface EmbalseProperties {
   porcentaje: number | null;
   estado: EstadoEmbalse;
   fecha: string | null;
+  fuente: string;
 }
 
 /**
  * Umbrales de llenado. No significan "desbordado": un embalse lleno no es
  * peligroso por sí mismo. Lo que miden es el MARGEN que le queda para absorber
- * una crecida. Al 97% ya casi no hay colchón, así que lo que entra sale.
+ * una crecida. Al 95% ya casi no hay colchón, así que lo que entra sale.
  */
 const UMBRAL_AMARILLO = 85;
 const UMBRAL_ROJO = 95;
@@ -45,70 +48,34 @@ export function clasificarEmbalse(porcentaje: number | null): EstadoEmbalse {
   return "verde";
 }
 
-/** Busca en un objeto la primera clave cuyo nombre contenga alguno de los términos. */
-function buscarCampo(props: Record<string, unknown>, terminos: string[]): { clave: string; valor: number } | null {
+export class EmbalsesError extends Error {
+  constructor(mensaje: string, readonly diagnostico: string[]) {
+    super(mensaje);
+    this.name = "EmbalsesError";
+  }
+}
+
+// --- Detección de campos ----------------------------------------------------
+
+const normalizar = (s: string) => s.toLowerCase().normalize("NFD").replace(/[̀-ͯ]/g, "");
+
+/** Primera clave cuyo nombre contenga alguno de los términos y cuyo valor sea numérico. */
+function campoNumerico(props: Record<string, unknown>, terminos: string[]): number | null {
   for (const [clave, valor] of Object.entries(props)) {
-    const normalizada = clave.toLowerCase().normalize("NFD").replace(/[̀-ͯ]/g, "");
-    if (!terminos.some((t) => normalizada.includes(t))) continue;
+    const n = normalizar(clave);
+    if (!terminos.some((t) => n.includes(t))) continue;
     const num = typeof valor === "number" ? valor : typeof valor === "string" ? Number(valor.replace(",", ".")) : NaN;
-    if (Number.isFinite(num)) return { clave, valor: num };
+    if (Number.isFinite(num)) return num;
   }
   return null;
 }
 
-function buscarTexto(props: Record<string, unknown>, terminos: string[]): string | null {
+function campoTexto(props: Record<string, unknown>, terminos: string[]): string | null {
   for (const [clave, valor] of Object.entries(props)) {
-    const normalizada = clave.toLowerCase().normalize("NFD").replace(/[̀-ͯ]/g, "");
-    if (terminos.some((t) => normalizada.includes(t)) && typeof valor === "string" && valor.trim()) {
-      return valor.trim();
-    }
+    const n = normalizar(clave);
+    if (terminos.some((t) => n.includes(t)) && typeof valor === "string" && valor.trim()) return valor.trim();
   }
   return null;
-}
-
-interface ColeccionOGC {
-  id: string;
-  title?: string;
-  description?: string;
-}
-
-/** Lista las colecciones del servicio y devuelve las que parecen de embalses. */
-export async function descubrirColecciones(): Promise<{ todas: ColeccionOGC[]; candidatas: ColeccionOGC[] }> {
-  const res = await fetch(`${OGC_BASE}/collections?f=json`, { headers: { Accept: "application/json" } });
-  if (!res.ok) throw new Error(`No se pudo listar colecciones (HTTP ${res.status}) en ${OGC_BASE}/collections`);
-
-  const json = (await res.json()) as { collections?: ColeccionOGC[] };
-  const todas = json.collections ?? [];
-  // Se prueban varios términos porque el nombre real de la colección es una
-  // incógnita: puede venir en castellano, en inglés o con un código interno.
-  const TERMINOS = ["embalse", "presa", "reservoir", "dam", "hidro", "agua", "saih", "aforo"];
-  const candidatas = todas.filter((c) => {
-    const texto = `${c.id} ${c.title ?? ""} ${c.description ?? ""}`.toLowerCase();
-    return TERMINOS.some((t) => texto.includes(t));
-  });
-  return { todas, candidatas };
-}
-
-interface FeatureOGC {
-  id?: string | number;
-  geometry?: { type: string; coordinates: unknown };
-  properties?: Record<string, unknown>;
-}
-
-/** Extrae el punto de una geometría, aceptando tanto Point como polígonos (centroide burdo). */
-function puntoDe(geom: FeatureOGC["geometry"]): [number, number] | null {
-  if (!geom) return null;
-  if (geom.type === "Point") {
-    const c = geom.coordinates as [number, number];
-    return Array.isArray(c) && c.length >= 2 && Number.isFinite(c[0]) && Number.isFinite(c[1]) ? [c[0], c[1]] : null;
-  }
-  // Para superficies nos vale el primer vértice del anillo exterior: a escala de
-  // mapa nacional la diferencia con el centroide real es irrelevante.
-  const anillos = geom.coordinates as number[][][] | number[][][][];
-  const primer = geom.type === "Polygon" ? (anillos as number[][][])[0]?.[0] : (anillos as number[][][][])[0]?.[0]?.[0];
-  return Array.isArray(primer) && Number.isFinite(primer[0]) && Number.isFinite(primer[1])
-    ? [primer[0], primer[1]]
-    : null;
 }
 
 /** Comprobación de cordura: el punto tiene que caer sobre España o sus islas. */
@@ -117,110 +84,148 @@ function caeEnEspana(lon: number, lat: number): boolean {
 }
 
 /**
- * Error que se lleva consigo el diagnóstico acumulado. Sin esto, al lanzar la
- * excepción se perdía justo la información que hacía falta para corregir: la
- * lista de colecciones que el servicio sí ofrece.
+ * Calcula el llenado. Si el porcentaje viene dado se usa tal cual; si no, se deduce
+ * de volumen y capacidad. Un volumen absurdamente mayor que la capacidad significa
+ * que se han emparejado mal los campos, y entonces es preferible no dar ningún dato.
  */
-export class EmbalsesError extends Error {
-  constructor(mensaje: string, readonly diagnostico: string[]) {
-    super(mensaje);
-    this.name = "EmbalsesError";
+function calcularLlenado(props: Record<string, unknown>): { pct: number | null; vol: number | null; cap: number | null } {
+  const cap = campoNumerico(props, ["capacitat", "capacidad", "cap_total", "volum_total", "volumen_total"]);
+  const vol = campoNumerico(props, ["volum_embassat", "volumen_embalsado", "vol_actual", "volumen_actual", "embalsada", "volum", "volumen"]);
+  const directo = campoNumerico(props, ["percentatge", "porcentaje", "percent", "pct", "llenado", "ple"]);
+
+  if (directo !== null && directo >= 0 && directo <= 100) return { pct: Math.round(directo * 10) / 10, vol, cap };
+  if (cap !== null && vol !== null && cap > 0 && vol >= 0) {
+    const pct = (vol / cap) * 100;
+    if (pct <= 130) return { pct: Math.round(pct * 10) / 10, vol, cap };
   }
+  return { pct: null, vol, cap };
 }
 
-export interface ResultadoEmbalses {
-  coleccion: FeatureCollectionEmbalses;
-  diagnostico: string[];
+// --- Fuentes ----------------------------------------------------------------
+
+export interface FuenteEmbalses {
+  id: string;
+  nombre: string;
+  cobertura: string;
+  /** Cada cuánto publica datos nuevos, para poder decirlo con honestidad en la app. */
+  frecuencia: string;
+  obtener(diagnostico: string[]): Promise<GeoFeature<EmbalseProperties>[]>;
 }
 
-export type FeatureCollectionEmbalses = GeoFeatureCollection<EmbalseProperties>;
-
-export async function getEmbalses(): Promise<ResultadoEmbalses> {
-  const diagnostico: string[] = [];
-  const { todas, candidatas } = await descubrirColecciones();
-
-  diagnostico.push(`${todas.length} colecciones en el servicio; ${candidatas.length} parecen de embalses`);
-  for (const c of candidatas.slice(0, 5)) diagnostico.push(`  candidata: ${c.id} — ${c.title ?? "sin título"}`);
-  if (candidatas.length === 0) {
-    // Se vuelcan TODAS las colecciones: sin la lista real no hay forma de saber
-    // cómo se llama la que buscamos, y adivinar es justo lo que no queremos hacer.
-    diagnostico.push("Ninguna colección coincide con los términos buscados. Las que ofrece el servicio son:");
-    for (const c of todas) diagnostico.push(`  · ${c.id}${c.title ? ` — ${c.title}` : ""}`);
-    throw new EmbalsesError(`Ninguna de las ${todas.length} colecciones parece de embalses`, diagnostico);
-  }
-
-  const features: GeoFeature<EmbalseProperties>[] = [];
-  let camposVistos = "";
-
-  for (const col of candidatas) {
-    const url = `${OGC_BASE}/collections/${encodeURIComponent(col.id)}/items?f=json&limit=1000`;
+/**
+ * Agència Catalana de l'Aigua, vía el portal de datos abiertos de la Generalitat.
+ * Es la única fuente encontrada hasta ahora con API pública y documentada: el
+ * portal usa Socrata, que expone cada conjunto como JSON y sin clave.
+ *
+ * Cubre solo las cuencas internas de Catalunya, no el Ebro ni las mediterráneas.
+ * Sirve para tener la capa viva y verificar la tubería entera con datos reales
+ * mientras se resuelven las cuencas donde caen las DANAs.
+ */
+const ACA: FuenteEmbalses = {
+  id: "aca",
+  nombre: "Agència Catalana de l'Aigua",
+  cobertura: "Cuencas internas de Catalunya",
+  frecuencia: "diaria",
+  async obtener(diagnostico) {
+    const url = "https://analisi.transparenciacatalunya.cat/resource/gn9e-3qhr.json?$limit=2000&$order=dia%20DESC";
     let res: Response;
     try {
-      res = await fetch(url, { headers: { Accept: "application/geo+json, application/json" } });
+      res = await fetch(url, { headers: { Accept: "application/json" } });
     } catch (err) {
       const causa = (err as { cause?: { code?: string } }).cause?.code ?? (err as Error).message;
-      diagnostico.push(`  ✗ ${col.id}: no se pudo conectar — ${causa}`);
-      continue;
+      throw new Error(`no se pudo conectar — ${causa}`);
     }
-    if (!res.ok) {
-      diagnostico.push(`  ✗ ${col.id}: HTTP ${res.status}`);
-      continue;
+    if (!res.ok) throw new Error(`HTTP ${res.status}`);
+
+    const filas = (await res.json()) as Record<string, unknown>[];
+    if (!Array.isArray(filas) || filas.length === 0) throw new Error("la consulta no devolvió filas");
+
+    // Los nombres de campo reales son lo más valioso para ajustar la detección sin
+    // adivinar, así que quedan registrados.
+    diagnostico.push(`  campos: ${Object.keys(filas[0]).join(", ")}`);
+
+    // Cada embalse aparece muchas veces, una por fecha. Nos quedamos con la más
+    // reciente de cada uno: mezclar fechas daría un mapa incoherente.
+    const porEmbalse = new Map<string, Record<string, unknown>>();
+    for (const fila of filas) {
+      const nombre = campoTexto(fila, ["estaci", "embassament", "embalse", "nom"]);
+      if (nombre && !porEmbalse.has(nombre)) porEmbalse.set(nombre, fila);
     }
 
-    const json = (await res.json()) as { features?: FeatureOGC[] };
-    const items = json.features ?? [];
-    diagnostico.push(`  ✓ ${col.id}: ${items.length} elementos`);
+    const features: GeoFeature<EmbalseProperties>[] = [];
+    let sinCoordenadas = 0;
 
-    if (items.length > 0 && !camposVistos) {
-      // Dejamos constancia de los campos reales: es lo que permite ajustar la
-      // detección sin tener que adivinar desde fuera.
-      camposVistos = Object.keys(items[0].properties ?? {}).join(", ");
-      diagnostico.push(`  campos disponibles: ${camposVistos}`);
-    }
+    for (const [nombre, fila] of porEmbalse) {
+      const lat = campoNumerico(fila, ["latitud", "lat"]);
+      const lon = campoNumerico(fila, ["longitud", "lon", "lng"]);
 
-    for (const item of items) {
-      const props = item.properties ?? {};
-      const punto = puntoDe(item.geometry);
-      if (!punto || !caeEnEspana(punto[0], punto[1])) continue;
-
-      const capacidad = buscarCampo(props, ["capacidad", "cap_total", "volumen_total", "vol_total"]);
-      const volumen = buscarCampo(props, ["volumen_actual", "vol_actual", "volumenemb", "agua_embalsada", "embalsada", "volumen"]);
-      const porcentajeDirecto = buscarCampo(props, ["porcentaje", "pct", "llenado"]);
-
-      let porcentaje: number | null = null;
-      if (porcentajeDirecto && porcentajeDirecto.valor >= 0 && porcentajeDirecto.valor <= 100) {
-        porcentaje = porcentajeDirecto.valor;
-      } else if (capacidad && volumen && capacidad.valor > 0 && volumen.valor >= 0) {
-        // Si el volumen supera claramente la capacidad, es que hemos emparejado mal
-        // los campos; preferimos no dar un porcentaje a dar uno falso.
-        const pct = (volumen.valor / capacidad.valor) * 100;
-        porcentaje = pct <= 130 ? Math.round(pct * 10) / 10 : null;
+      // Sin coordenadas no se puede dibujar, y no se inventan.
+      if (lat === null || lon === null || !caeEnEspana(lon, lat)) {
+        sinCoordenadas++;
+        continue;
       }
 
-      const nombre = buscarTexto(props, ["nombre", "denominacion", "embalse", "presa"]) ?? String(item.id ?? "Embalse");
-
+      const { pct, vol, cap } = calcularLlenado(fila);
       features.push({
         type: "Feature",
-        geometry: { type: "Point", coordinates: punto },
+        geometry: { type: "Point", coordinates: [lon, lat] },
         properties: {
-          id: String(item.id ?? `${col.id}-${features.length}`),
+          id: `aca-${normalizar(nombre).replace(/\s+/g, "-")}`,
           nombre,
-          cuenca: buscarTexto(props, ["cuenca", "demarcacion", "ambito", "confederacion"]),
-          volumenActual_hm3: volumen?.valor ?? null,
-          capacidadTotal_hm3: capacidad?.valor ?? null,
-          porcentaje,
-          estado: clasificarEmbalse(porcentaje),
-          fecha: buscarTexto(props, ["fecha", "date"]),
+          cuenca: "Cuencas internas de Catalunya",
+          volumenActual_hm3: vol,
+          capacidadTotal_hm3: cap,
+          porcentaje: pct,
+          estado: clasificarEmbalse(pct),
+          fecha: campoTexto(fila, ["dia", "data", "fecha"]),
+          fuente: "ACA",
         },
       });
     }
-  }
 
-  const conPorcentaje = features.filter((f) => f.properties.porcentaje !== null).length;
-  diagnostico.push(`Total: ${features.length} embalses, ${conPorcentaje} con nivel de llenado`);
+    diagnostico.push(`  ${porEmbalse.size} embalses distintos, ${features.length} con coordenadas usables`);
+    if (sinCoordenadas > 0) {
+      diagnostico.push(`  ⚠️ ${sinCoordenadas} descartados por no traer coordenadas: harán falta de otra fuente`);
+    }
+    return features;
+  },
+};
+
+/** Cuencas integradas. Se van añadiendo una a una según se localiza su API. */
+const FUENTES: FuenteEmbalses[] = [ACA];
+
+export interface ResultadoEmbalses {
+  coleccion: GeoFeatureCollection<EmbalseProperties>;
+  diagnostico: string[];
+}
+
+export async function getEmbalses(): Promise<ResultadoEmbalses> {
+  const diagnostico: string[] = [];
+  const features: GeoFeature<EmbalseProperties>[] = [];
+
+  // Las fuentes son independientes: que una cuenca falle no debe dejar sin datos
+  // a las demás.
+  const resultados = await Promise.allSettled(
+    FUENTES.map(async (f) => {
+      diagnostico.push(`${f.nombre} (${f.cobertura}, ${f.frecuencia}):`);
+      return f.obtener(diagnostico);
+    })
+  );
+
+  resultados.forEach((r, i) => {
+    if (r.status === "fulfilled") {
+      features.push(...r.value);
+    } else {
+      const motivo = r.reason instanceof Error ? r.reason.message : String(r.reason);
+      diagnostico.push(`  ✗ ${FUENTES[i].nombre}: ${motivo}`);
+    }
+  });
+
+  const conNivel = features.filter((f) => f.properties.porcentaje !== null).length;
+  diagnostico.push(`Total: ${features.length} embalses, ${conNivel} con nivel de llenado`);
 
   if (features.length === 0) {
-    throw new EmbalsesError("No se obtuvo ningún embalse válido de las colecciones candidatas", diagnostico);
+    throw new EmbalsesError("Ninguna fuente devolvió embalses utilizables", diagnostico);
   }
 
   return {

@@ -141,6 +141,7 @@ export interface EmbalseProperties {
   porcentaje: number | null;
   estado: EstadoEmbalse;
   fecha: string | null;
+  fuente: string;
 }
 
 export const EMBALSE_COLOR: Record<EstadoEmbalse, string> = {
