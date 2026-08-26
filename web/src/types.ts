@@ -129,3 +129,34 @@ export const HAZARD_ICON: Record<HazardKind, string> = {
   terremoto: "🌍",
   otro: "⚠️",
 };
+
+export type EstadoEmbalse = "verde" | "amarillo" | "rojo" | "desconocido";
+
+export interface EmbalseProperties {
+  id: string;
+  nombre: string;
+  cuenca: string | null;
+  volumenActual_hm3: number | null;
+  capacidadTotal_hm3: number | null;
+  porcentaje: number | null;
+  estado: EstadoEmbalse;
+  fecha: string | null;
+}
+
+export const EMBALSE_COLOR: Record<EstadoEmbalse, string> = {
+  verde: "#22c55e",
+  amarillo: "#eab308",
+  rojo: "#ef4444",
+  desconocido: "#64748b",
+};
+
+/**
+ * Un embalse lleno no está "desbordado": lo que mide el color es el MARGEN que le
+ * queda para absorber una crecida. Sin margen, lo que entra sale aguas abajo.
+ */
+export const EMBALSE_ETIQUETA: Record<EstadoEmbalse, string> = {
+  verde: "Con margen",
+  amarillo: "Poco margen",
+  rojo: "Sin margen",
+  desconocido: "Sin dato de nivel",
+};

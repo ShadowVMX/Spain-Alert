@@ -19,7 +19,7 @@ const REFRESCO_MS = 5 * 60 * 1000;
 
 export default function App() {
   const [locationOn, setLocationOn] = useState(false);
-  const [capas, setCapas] = useState<CapasVisibles>({ radar: true, avisos: true, estaciones: true, terremotos: false });
+  const [capas, setCapas] = useState<CapasVisibles>({ radar: true, avisos: true, estaciones: true, terremotos: false, embalses: true });
   const [saihLayers, setSaihLayers] = useState<SaihCapa[]>([]);
   const [refreshKey, setRefreshKey] = useState(0);
 

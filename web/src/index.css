@@ -872,3 +872,7 @@ input[type="range"]::-moz-range-thumb {
     transition: none !important;
   }
 }
+
+.embalse--lleno {
+  animation: latir-marcador 2s ease-in-out infinite;
+}

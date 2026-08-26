@@ -1,4 +1,4 @@
-import type { EarthquakeProperties, GeoFeatureCollection, SaihCapa, WarningProperties, WeatherStationProperties } from "./types";
+import type { EarthquakeProperties, EmbalseProperties, GeoFeatureCollection, SaihCapa, WarningProperties, WeatherStationProperties } from "./types";
 
 /**
  * La app funciona en dos modos:
@@ -19,6 +19,7 @@ const RUTAS = {
     avisos: `${base}datos/avisos.json`,
     estaciones: `${base}datos/estaciones.json`,
     terremotos: `${base}datos/terremotos.json`,
+    embalses: `${base}datos/embalses.json`,
     meta: `${base}datos/meta.json`,
     saih: `${base}datos/saih.json`,
   },
@@ -26,6 +27,7 @@ const RUTAS = {
     avisos: "/api/warnings",
     estaciones: "/api/sensors/weather",
     terremotos: "/api/earthquakes",
+    embalses: null,
     meta: "/api/health",
     saih: null,
   },
@@ -42,6 +44,13 @@ async function getJson<T>(url: string): Promise<T> {
 export const fetchWarnings = () => getJson<GeoFeatureCollection<WarningProperties>>(RUTAS[DATA_MODE].avisos);
 export const fetchStations = () => getJson<GeoFeatureCollection<WeatherStationProperties>>(RUTAS[DATA_MODE].estaciones);
 export const fetchEarthquakes = () => getJson<GeoFeatureCollection<EarthquakeProperties>>(RUTAS[DATA_MODE].terremotos);
+
+/** Los embalses solo existen en modo estático: el backend todavía no los sirve. */
+export const fetchEmbalses = async (): Promise<GeoFeatureCollection<EmbalseProperties> | null> => {
+  const ruta = RUTAS[DATA_MODE].embalses;
+  if (!ruta) return null;
+  return getJson<GeoFeatureCollection<EmbalseProperties>>(ruta);
+};
 
 export interface SaihCapaInfo {
   wmsUrl: string;

@@ -3,7 +3,7 @@ import distance from "@turf/distance";
 import { point } from "@turf/helpers";
 import { SAFETY_INSTRUCTIONS } from "./instructions";
 import { RAIN_INTENSITY_LABEL } from "./types";
-import type { EarthquakeProperties, GeoFeatureCollection, NearbyAlert, WarningProperties, WeatherStationProperties } from "./types";
+import type { EarthquakeProperties, EmbalseProperties, GeoFeatureCollection, NearbyAlert, WarningProperties, WeatherStationProperties } from "./types";
 
 /**
  * El cálculo de proximidad se hace aquí, en el navegador, y no en un servidor.
@@ -38,6 +38,12 @@ const UNA_HORA_MS = 60 * 60 * 1000;
 // de falsas alarmas a quien tenga la app abierta.
 const LECTURA_MAX_ANTIGUEDAD_MS = 2 * UNA_HORA_MS;
 
+// Un embalse afecta a quien está aguas abajo, que puede ser bastante más lejos que
+// una tormenta local: de ahí el radio más amplio que el de las estaciones.
+const EMBALSE_RADIO_KM = 40;
+// Lluvia a partir de la cual un embalse sin margen empieza a ser preocupante.
+const LLUVIA_RELEVANTE_MM = 10;
+
 function esReciente(fechaHora: string): boolean {
   const t = new Date(fechaHora).getTime();
   if (Number.isNaN(t)) return false;
@@ -48,6 +54,7 @@ export interface Datos {
   avisos: GeoFeatureCollection<WarningProperties> | null;
   estaciones: GeoFeatureCollection<WeatherStationProperties> | null;
   terremotos: GeoFeatureCollection<EarthquakeProperties> | null;
+  embalses: GeoFeatureCollection<EmbalseProperties> | null;
 }
 
 export function calcularAlertasCercanas(lat: number, lon: number, datos: Datos): NearbyAlert[] {
@@ -134,6 +141,45 @@ export function calcularAlertasCercanas(lat: number, lon: number, datos: Datos):
         instrucciones: SAFETY_INSTRUCTIONS.avenidas,
         fuente: "AEMET (estación automática, aviso no oficial)",
       });
+    }
+  }
+
+  // --- Embalses sin margen -------------------------------------------------
+  //
+  // Un embalse lleno NO es una emergencia por sí mismo: en primavera es lo normal.
+  // Lo que sí importa es la combinación: un embalse sin capacidad de absorber agua
+  // MIENTRAS está lloviendo cerca significa que lo que entra sale aguas abajo.
+  //
+  // Avisar solo por el nivel llenaría la app de alertas permanentes que la gente
+  // acabaría ignorando, y con ellas ignoraría también las de verdad.
+  const embalsesSinMargen = (datos.embalses?.features ?? []).filter((f) => f.properties.estado === "rojo");
+  if (embalsesSinMargen.length > 0) {
+    const lloviendoCerca = (datos.estaciones?.features ?? []).some(
+      (f) => esReciente(f.properties.fechaHora) && (f.properties.precipitacion1h_mm ?? 0) >= LLUVIA_RELEVANTE_MM
+    );
+
+    if (lloviendoCerca) {
+      const cercanos = embalsesSinMargen
+        .map((f) => {
+          const geom = f.geometry as GeoJSON.Point;
+          return { f, d: distance(userPoint, point(geom.coordinates as [number, number]), { units: "kilometers" }) };
+        })
+        .filter(({ d }) => d <= EMBALSE_RADIO_KM);
+
+      if (cercanos.length > 0) {
+        const masCercano = cercanos.reduce((a, b) => (a.d < b.d ? a : b));
+        const pct = masCercano.f.properties.porcentaje;
+        alerts.push({
+          tipo: "avenidas",
+          severidad: "naranja",
+          titulo:
+            `El embalse de ${masCercano.f.properties.nombre} está al ${pct !== null ? `${pct}%` : "límite"} ` +
+            `y está lloviendo en la zona: sin margen para absorber la crecida, el agua va aguas abajo`,
+          distancia_km: Math.round(masCercano.d),
+          instrucciones: SAFETY_INSTRUCTIONS.avenidas,
+          fuente: "MITECO (nivel de embalses)",
+        });
+      }
     }
   }
 
