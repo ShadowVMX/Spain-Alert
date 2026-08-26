@@ -37,6 +37,9 @@ jobs:
       # Construir la web es lo que de verdad protege al usuario: si esto falla, lo
       # que se publicaría sería una página rota. No hace falta clave de AEMET
       # porque no se descargan datos, solo se compila.
+      - name: Comprobaciones del motor de alertas
+        run: npm --prefix web run test
+
       - name: Construir la web
         env:
           VITE_DATA_MODE: estatico
