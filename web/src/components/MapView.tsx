@@ -257,6 +257,8 @@ export function MapView({ datos, radar, indiceRadar, opacidadRadar, capas, saihL
                           <dd>{p.cuenca}</dd>
                         </>
                       )}
+                      <dt>Fuente</dt>
+                      <dd>{p.fuente}</dd>
                     </dl>
                     {sinMargen && (
                       <p>Sin capacidad para absorber una crecida: si llueve fuerte, el agua pasa aguas abajo.</p>
