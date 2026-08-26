@@ -80,3 +80,9 @@ jobs:
 
       - id: deployment
         uses: actions/deploy-pages@v4
+
+      # Al final del job, donde se lee sin tener que excavar entre las líneas de
+      # las acciones oficiales. Se ejecuta siempre, también si algo ha fallado.
+      - name: Estado de las fuentes de datos
+        if: always()
+        run: cat "$RUNNER_TEMP/diagnostico.txt" 2>/dev/null || echo "(sin diagnóstico)"

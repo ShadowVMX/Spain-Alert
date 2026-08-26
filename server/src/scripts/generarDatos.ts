@@ -40,12 +40,25 @@ interface Resultado {
  * un vistazo, así que el diagnóstico de las fuentes va también ahí.
  */
 async function alResumen(lineas: string[]): Promise<void> {
+  const texto = lineas.join("\n") + "\n";
+
+  // El resumen del job se lee cómodamente en la web de GitHub...
   const destino = process.env.GITHUB_STEP_SUMMARY;
-  if (!destino) return;
+  if (destino) {
+    try {
+      await fs.appendFile(destino, texto, "utf-8");
+    } catch {
+      // Es una comodidad, no una función crítica: si falla, seguimos.
+    }
+  }
+
+  // ...pero el log de un paso queda sepultado bajo cientos de líneas de las
+  // acciones oficiales. Guardarlo aparte permite volcarlo al final del job, que
+  // es donde se puede leer sin excavar.
   try {
-    await fs.appendFile(destino, lineas.join("\n") + "\n", "utf-8");
+    await fs.writeFile(path.join(process.env.RUNNER_TEMP ?? "/tmp", "diagnostico.txt"), texto, "utf-8");
   } catch {
-    // El resumen es una comodidad, no una función crítica: si falla, seguimos.
+    // Ídem: si no se puede escribir, no pasa nada.
   }
 }
 
