@@ -44,66 +44,44 @@ interface Candidato {
 }
 
 const CANDIDATOS: Candidato[] = [
-  // === RONDA 5 =============================================================
-  // La ronda 4 encontró el oro: el visor del Júcar trae sus datos EMBEBIDOS en
-  // el propio HTML, con coordenadas y lluvia acumulada a 1, 4, 12 y 24 horas,
-  // fechada cinco minutos antes del sondeo. Y es la cuenca de la DANA.
+  // === RONDA 6 =============================================================
+  // Dos cabos sueltos, los dos a un paso de cerrarse.
   //
-  // Ojo con los nombres de los campos: `fldNCoordGPSLat` vale 756021 y
-  // `fldNCoordGPSLon` vale 4271631. Eso no son grados: es UTM del huso 30 Norte,
-  // y encima están al revés — el que dice "Lat" lleva la X. Se comprueba con
-  // l'Alfàs del Pi, que cae en (755000, 4272000). Fiarse del nombre del campo
-  // habría puesto Alicante en el océano Índico.
+  // Júcar: confirmado que la raíz declara `let estaciones = [{"idEstacion...`, con
+  // toda la red de pluviómetros de la cuenca. Pero la raíz es el mapa de LLUVIA;
+  // los embalses y los aforos estarán en otra ruta. El menú lateral no la delató,
+  // así que se prueban las evidentes.
+  { grupo: "SAIH Júcar", id: "rutaembalses", buscamos: "página de embalses o aforos", url: "https://saih.chj.es/embalses", extraer: "let \\w+ = \\[\\{" },
+  { grupo: "SAIH Júcar", id: "rutaaforos", buscamos: "página de embalses o aforos", url: "https://saih.chj.es/aforos", extraer: "let \\w+ = \\[\\{" },
+  { grupo: "SAIH Júcar", id: "rutaembalse", buscamos: "página de embalses o aforos", url: "https://saih.chj.es/embalse", extraer: "let \\w+ = \\[\\{" },
+  { grupo: "SAIH Júcar", id: "rutaaforo", buscamos: "página de embalses o aforos", url: "https://saih.chj.es/aforo", extraer: "let \\w+ = \\[\\{" },
+  { grupo: "SAIH Júcar", id: "rutanivel", buscamos: "página de embalses o aforos", url: "https://saih.chj.es/nivel", extraer: "let \\w+ = \\[\\{" },
+  { grupo: "SAIH Júcar", id: "rutacaudal", buscamos: "página de embalses o aforos", url: "https://saih.chj.es/caudal", extraer: "let \\w+ = \\[\\{" },
+  { grupo: "SAIH Júcar", id: "rutalluvia", buscamos: "página de embalses o aforos", url: "https://saih.chj.es/lluvia", extraer: "let \\w+ = \\[\\{" },
 
-  // --- Júcar: dónde se declara ese JSON, y qué otras páginas hay -----------
-  {
-    grupo: "SAIH Júcar",
-    id: "declaracion-datos",
-    buscamos: "el nombre de la variable que lleva el JSON embebido, para poder extraerlo",
-    url: "https://saih.chj.es/",
-    extraer: '(?:var|let|const)\\s+[\\w$]+\\s*=\\s*(?:JSON\\.parse\\()?[\'"\\[]\\[?\\{?"?idEstacion',
-  },
-  {
-    grupo: "SAIH Júcar",
-    id: "contexto-json",
-    buscamos: "el HTML justo antes del JSON, que enseña cómo va envuelto",
-    url: "https://saih.chj.es/",
-    volcado: 1200,
-    volcadoDesde: 86500,
-  },
-  {
-    grupo: "SAIH Júcar",
-    id: "menu-lateral",
-    buscamos: "las otras páginas del visor: embalses y aforos, no solo lluvia",
-    url: "https://saih.chj.es/js/left-sidebar.js",
-    extraer: '["\'`]/[\\w/-]{2,40}["\'`]',
-  },
-
-  // --- Hidrosur: el CSV pide fechas, se las damos -------------------------
-  // El formulario declara `datepickerini` y `datepickerfin`, y el script maneja
-  // `fechaIniPHP` y `fechaFinPHP`. Probamos ambos nombres.
+  // Hidrosur: `datepickerini` y `datepickerfin` SON los nombres buenos — el error
+  // cambió de "son requeridos" a "las fechas no son correctas" — así que solo
+  // falla el formato. Se prueban los tres habituales.
   {
     grupo: "Hidrosur",
-    id: "csv-datepicker",
-    buscamos: "si acepta los nombres del formulario",
-    url: "https://www.redhidrosurmedioambiente.es/saih/datos/a/la/carta/csv?datepickerini=25/08/2026&datepickerfin=26/08/2026&tipoestacion=E",
-    volcado: 700,
+    id: "csv-iso",
+    buscamos: "formato de fecha yyyy-mm-dd",
+    url: "https://www.redhidrosurmedioambiente.es/saih/datos/a/la/carta/csv?datepickerini=2026-08-25&datepickerfin=2026-08-26&estacion=6&sensor=006P01",
+    volcado: 500,
   },
   {
     grupo: "Hidrosur",
-    id: "csv-fechaini",
-    buscamos: "si acepta los nombres que usa el script",
-    url: "https://www.redhidrosurmedioambiente.es/saih/datos/a/la/carta/csv?fechaIni=25/08/2026&fechaFin=26/08/2026&tipoestacion=E",
-    volcado: 700,
+    id: "csv-guiones",
+    buscamos: "formato de fecha dd-mm-yyyy",
+    url: "https://www.redhidrosurmedioambiente.es/saih/datos/a/la/carta/csv?datepickerini=25-08-2026&datepickerfin=26-08-2026&estacion=6&sensor=006P01",
+    volcado: 500,
   },
   {
     grupo: "Hidrosur",
-    id: "parametros-post",
-    buscamos: "el catálogo de agrupaciones, provincias y tipos de estación",
-    url: "https://www.redhidrosurmedioambiente.es/saih/datos/a/la/carta/parametros",
-    metodo: "POST",
-    cuerpo: { agrupacion: "1" },
-    volcado: 1200,
+    id: "csv-con-hora",
+    buscamos: "formato de fecha dd/mm/yyyy hh:mm",
+    url: "https://www.redhidrosurmedioambiente.es/saih/datos/a/la/carta/csv?datepickerini=25%2F08%2F2026%2000%3A00&datepickerfin=26%2F08%2F2026%2000%3A00&estacion=6&sensor=006P01",
+    volcado: 500,
   },
 ];
 
