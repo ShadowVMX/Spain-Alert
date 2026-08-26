@@ -11,6 +11,9 @@ export interface WeatherStationProperties {
   precipitacionAcumulada_mm: number | null;
   intensidadLluvia: import("./rain.js").RainIntensity;
   lluvia3h_mm: number | null;
+  /** Lluvia acumulada en 6 h y en 24 h: la que satura el terreno sin picos llamativos. */
+  lluvia6h_mm: number | null;
+  lluvia24h_mm: number | null;
   tendenciaLluvia: import("./rain.js").RainTrend | null;
   vientoVelocidad_kmh: number | null;
   vientoDireccion_grados: number | null;

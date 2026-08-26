@@ -17,7 +17,7 @@ const YO = { lat: 39.47, lon: -0.38 };
 const ahora = () => new Date().toISOString();
 const haceHoras = (h: number) => new Date(Date.now() - h * 3600_000).toISOString();
 
-function estacion(nombre: string, lat: number, lon: number, mmHora: number, opts: { hace?: number; mm3h?: number } = {}) {
+function estacion(nombre: string, lat: number, lon: number, mmHora: number, opts: { hace?: number; mm3h?: number; mm6h?: number; mm24h?: number } = {}) {
   return {
     type: "Feature" as const,
     geometry: { type: "Point" as const, coordinates: [lon, lat] },
@@ -26,7 +26,10 @@ function estacion(nombre: string, lat: number, lon: number, mmHora: number, opts
       fechaHora: opts.hace ? haceHoras(opts.hace) : ahora(),
       precipitacion1h_mm: mmHora, precipitacionAcumulada_mm: mmHora,
       intensidadLluvia: mmHora >= 60 ? ("torrencial" as const) : mmHora >= 30 ? ("muy_fuerte" as const) : ("moderada" as const),
-      lluvia3h_mm: opts.mm3h ?? mmHora, tendenciaLluvia: null,
+      lluvia3h_mm: opts.mm3h ?? mmHora,
+      lluvia6h_mm: opts.mm6h ?? opts.mm3h ?? mmHora,
+      lluvia24h_mm: opts.mm24h ?? opts.mm6h ?? opts.mm3h ?? mmHora,
+      tendenciaLluvia: null,
       vientoVelocidad_kmh: null, vientoDireccion_grados: null, vientoRacha_kmh: null, temperatura_c: null,
     },
   };
@@ -59,6 +62,28 @@ const vacio: Datos = { avisos: null, estaciones: null, terremotos: null, embalse
 const col = <T>(features: T[]) => ({ type: "FeatureCollection" as const, features, actualizado: ahora() });
 
 const casos: [string, () => boolean][] = [
+  [
+    "12 h de lluvia mansa (180 mm) SÍ avisan, aunque ninguna hora destaque",
+    () => {
+      // 15 mm/h sostenidos: ni el pico de 1 h ni el de 3 h llegan a umbral, pero el
+      // terreno lleva doce horas empapándose. Es el patrón de la DANA de Valencia.
+      const a = calcularAlertasCercanas(YO.lat, YO.lon, {
+        ...vacio,
+        estaciones: col([estacion("Chiva", 39.51, -0.38, 15, { mm3h: 45, mm6h: 90, mm24h: 180 })]) as never,
+      });
+      return a.some((x) => x.tipo === "avenidas");
+    },
+  ],
+  [
+    "un día entero de lluvia floja (24 mm) NO avisa",
+    () => {
+      const a = calcularAlertasCercanas(YO.lat, YO.lon, {
+        ...vacio,
+        estaciones: col([estacion("Tranquilo", 39.51, -0.38, 1, { mm3h: 3, mm6h: 6, mm24h: 24 })]) as never,
+      });
+      return a.length === 0;
+    },
+  ],
   [
     "lluvia torrencial a 5 km dispara aviso ROJO de riada",
     () => {

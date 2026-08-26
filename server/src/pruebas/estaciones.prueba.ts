@@ -20,6 +20,22 @@ const lectura = (fint: string, prec: number) => ({ idema: "E1", ubi: "Paiporta",
 
 const casos: [string, () => boolean][] = [
   [
+    "12 h de lluvia mansa se ven en el acumulado de 24 h",
+    () => {
+      // 15 mm/h durante 12 horas: ninguna hora llama la atención, pero son 180 mm.
+      // Es el patrón que satura el terreno y llena las ramblas.
+      const r = resumirPorEstacion(Array.from({ length: 12 }, (_, i) => lectura(hAtras(i), 15)));
+      return r[0]?.lluvia24h === 180 && r[0]?.lluvia6h === 90 && r[0]?.lluvia3h === 45;
+    },
+  ],
+  [
+    "el acumulado de 24 h no se lleva lecturas de hace 30 h",
+    () => {
+      const r = resumirPorEstacion([lectura(hAtras(30), 100), lectura(hAtras(1), 5), lectura(hAtras(0), 5)]);
+      return r[0]?.lluvia24h === 10;
+    },
+  ],
+  [
     "el acumulado de 3 h suma 3 horas, no 4",
     () => {
       // 4 lecturas horarias de 20 mm. Las 3 últimas horas son 60 mm, no 80.

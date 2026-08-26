@@ -148,6 +148,18 @@ export function MapView({ datos, radar, indiceRadar, opacidadRadar, capas, saihL
                           </dd>
                         </>
                       )}
+                      {f.properties.lluvia6h_mm !== null && (
+                        <>
+                          <dt>Acumulado 6 h</dt>
+                          <dd>{f.properties.lluvia6h_mm} mm</dd>
+                        </>
+                      )}
+                      {f.properties.lluvia24h_mm !== null && (
+                        <>
+                          <dt>Acumulado 24 h</dt>
+                          <dd>{f.properties.lluvia24h_mm} mm</dd>
+                        </>
+                      )}
                       <dt>Viento</dt>
                       <dd>
                         {f.properties.vientoVelocidad_kmh ?? "s/d"} km/h

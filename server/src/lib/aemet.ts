@@ -113,8 +113,8 @@ const msToKmh = (v: number | undefined) => (v === undefined ? null : Math.round(
 // distintas horas haría que una estación que registró lluvia torrencial esta
 // mañana siguiera disparando aviso de riada por la noche. Falsas alarmas
 // garantizadas, y con ellas el que la gente deje de hacer caso a los avisos.
-const TRES_HORAS_MS = 3 * 60 * 60 * 1000;
 const UNA_HORA_MS = 60 * 60 * 1000;
+const VENTANA_MAX_H = 24;
 
 // La tendencia solo tiene sentido entre lecturas seguidas. Si una estación estuvo
 // caída medio día, comparar su lectura de ahora con la de hace 12 h no dice si la
@@ -124,6 +124,8 @@ const HUECO_MAX_TENDENCIA_MS = 90 * 60 * 1000;
 interface HistorialEstacion {
   actual: AemetObservacion;
   lluvia3h: number | null;
+  lluvia6h: number | null;
+  lluvia24h: number | null;
   tendencia: import("./rain.js").RainTrend | null;
 }
 
@@ -143,19 +145,18 @@ export function resumirPorEstacion(observaciones: AemetObservacion[]): Historial
     const actual = lecturas[lecturas.length - 1];
     const instanteActual = new Date(actual.fint).getTime();
 
-    // El acumulado de 3 h sale del mismo payload, sin pedir nada más a AEMET, pero
-    // hay que sumarlo con cuidado: en cada lectura `prec` son los milímetros de los
-    // 60 minutos ANTERIORES a esa hora, no los de ese instante.
+    // Los acumulados salen del mismo payload, sin pedir nada más a AEMET, pero hay
+    // que sumarlos con cuidado: en cada lectura `prec` son los milímetros de los 60
+    // minutos ANTERIORES a esa hora, no los de ese instante.
     //
     // Eso tiene dos trampas, y antes se caía en las dos:
     //
-    //  - La ventana incluía la lectura de hace exactamente 3 h, que cubre la hora
-    //    que va de -4 h a -3 h. Se estaban sumando 4 horas y llamándolas 3.
+    //  - La ventana incluía la lectura del borde, que cubre la hora anterior a la
+    //    ventana. Se sumaban 4 horas y se llamaban 3.
     //
     //  - Se sumaban todas las lecturas. Una estación que reporta cada 20 minutos
-    //    manda tres lecturas por hora, y cada una cubre los mismos 60 minutos: se
-    //    solapan. Sumarlas multiplicaba la lluvia por tres. Con 30 mm reales
-    //    salían 120, de sobra para disparar solo el aviso de terreno saturado.
+    //    manda tres por hora, y las tres cubren los mismos 60 minutos: se solapan.
+    //    Sumarlas multiplicaba la lluvia por tres.
     //
     // Se agrupa por hora cubierta y se toma el máximo de cada una: para lecturas
     // horarias es la suma de siempre, y para las que se solapan deja de inventar
@@ -163,18 +164,32 @@ export function resumirPorEstacion(observaciones: AemetObservacion[]): Historial
     const porHora = new Map<number, number>();
     for (const l of lecturas) {
       const antiguedad = instanteActual - new Date(l.fint).getTime();
-      if (antiguedad < 0 || antiguedad >= TRES_HORAS_MS) continue;
+      if (antiguedad < 0 || antiguedad >= VENTANA_MAX_H * UNA_HORA_MS) continue;
       const mm = typeof l.prec === "number" && Number.isFinite(l.prec) && l.prec > 0 ? l.prec : 0;
       const hora = Math.floor(antiguedad / UNA_HORA_MS);
       porHora.set(hora, Math.max(porHora.get(hora) ?? 0, mm));
     }
-    const lluvia3h = porHora.size > 0 ? Math.round([...porHora.values()].reduce((a, b) => a + b, 0) * 10) / 10 : null;
+
+    const acumular = (horas: number): number | null => {
+      let total = 0;
+      let hayDatos = false;
+      for (const [hora, mm] of porHora) {
+        if (hora >= horas) continue;
+        total += mm;
+        hayDatos = true;
+      }
+      return hayDatos ? Math.round(total * 10) / 10 : null;
+    };
+
+    const lluvia3h = acumular(3);
+    const lluvia6h = acumular(6);
+    const lluvia24h = acumular(24);
 
     const anterior = lecturas.length >= 2 ? lecturas[lecturas.length - 2] : null;
     const huecoOk = anterior ? instanteActual - new Date(anterior.fint).getTime() <= HUECO_MAX_TENDENCIA_MS : false;
     const tendencia = anterior && huecoOk ? classifyTrend(actual.prec ?? 0, anterior.prec ?? 0) : null;
 
-    resumen.push({ actual, lluvia3h, tendencia });
+    resumen.push({ actual, lluvia3h, lluvia6h, lluvia24h, tendencia });
   }
   return resumen;
 }
@@ -186,7 +201,7 @@ export async function getWeatherStations(): Promise<GeoFeatureCollection<Weather
 
   console.log(`   ↳ ${observaciones.length} lecturas de AEMET resumidas en ${estaciones.length} estaciones`);
 
-  const features: GeoFeature<WeatherStationProperties>[] = estaciones.map(({ actual, lluvia3h, tendencia }) => ({
+  const features: GeoFeature<WeatherStationProperties>[] = estaciones.map(({ actual, lluvia3h, lluvia6h, lluvia24h, tendencia }) => ({
     type: "Feature",
     geometry: { type: "Point", coordinates: [actual.lon as number, actual.lat as number] },
     properties: {
@@ -198,6 +213,8 @@ export async function getWeatherStations(): Promise<GeoFeatureCollection<Weather
       precipitacionAcumulada_mm: actual.prec ?? null,
       intensidadLluvia: classifyRain(actual.prec ?? 0),
       lluvia3h_mm: lluvia3h,
+      lluvia6h_mm: lluvia6h,
+      lluvia24h_mm: lluvia24h,
       tendenciaLluvia: tendencia,
       vientoVelocidad_kmh: msToKmh(actual.vv),
       vientoDireccion_grados: actual.dv ?? null,
