@@ -44,44 +44,42 @@ interface Candidato {
 }
 
 const CANDIDATOS: Candidato[] = [
-  // === RONDA 6 =============================================================
-  // Dos cabos sueltos, los dos a un paso de cerrarse.
+  // === RONDA 7 =============================================================
+  // Cómo se piden y qué forma tienen los datos de /embalses y /aforos del Júcar.
+  // Esto hace falta igual para una capa que para la otra, así que se resuelve
+  // antes de escribir ninguna integración.
   //
-  // Júcar: confirmado que la raíz declara `let estaciones = [{"idEstacion...`, con
-  // toda la red de pluviómetros de la cuenca. Pero la raíz es el mapa de LLUVIA;
-  // los embalses y los aforos estarán en otra ruta. El menú lateral no la delató,
-  // así que se prueban las evidentes.
-  { grupo: "SAIH Júcar", id: "rutaembalses", buscamos: "página de embalses o aforos", url: "https://saih.chj.es/embalses", extraer: "let \\w+ = \\[\\{" },
-  { grupo: "SAIH Júcar", id: "rutaaforos", buscamos: "página de embalses o aforos", url: "https://saih.chj.es/aforos", extraer: "let \\w+ = \\[\\{" },
-  { grupo: "SAIH Júcar", id: "rutaembalse", buscamos: "página de embalses o aforos", url: "https://saih.chj.es/embalse", extraer: "let \\w+ = \\[\\{" },
-  { grupo: "SAIH Júcar", id: "rutaaforo", buscamos: "página de embalses o aforos", url: "https://saih.chj.es/aforo", extraer: "let \\w+ = \\[\\{" },
-  { grupo: "SAIH Júcar", id: "rutanivel", buscamos: "página de embalses o aforos", url: "https://saih.chj.es/nivel", extraer: "let \\w+ = \\[\\{" },
-  { grupo: "SAIH Júcar", id: "rutacaudal", buscamos: "página de embalses o aforos", url: "https://saih.chj.es/caudal", extraer: "let \\w+ = \\[\\{" },
-  { grupo: "SAIH Júcar", id: "rutalluvia", buscamos: "página de embalses o aforos", url: "https://saih.chj.es/lluvia", extraer: "let \\w+ = \\[\\{" },
+  // En la portada el JSON iba en `let estaciones = [{...}]`, pero ese mismo
+  // patrón da cero en /embalses: allí se llamará de otra forma, o se pedirá
+  // aparte. Las dos posibilidades se miran a la vez.
 
-  // Hidrosur: `datepickerini` y `datepickerfin` SON los nombres buenos — el error
-  // cambió de "son requeridos" a "las fechas no son correctas" — así que solo
-  // falla el formato. Se prueban los tres habituales.
   {
-    grupo: "Hidrosur",
-    id: "csv-iso",
-    buscamos: "formato de fecha yyyy-mm-dd",
-    url: "https://www.redhidrosurmedioambiente.es/saih/datos/a/la/carta/csv?datepickerini=2026-08-25&datepickerfin=2026-08-26&estacion=6&sensor=006P01",
-    volcado: 500,
+    grupo: "Júcar embalses",
+    id: "variables",
+    buscamos: "el nombre de la variable con el JSON, si es que va embebido",
+    url: "https://saih.chj.es/embalses",
+    extraer: "(?:var|let|const)\\s+[\\w$]+\\s*=\\s*(?:JSON\\.parse\\()?[\\[\'\"]",
   },
   {
-    grupo: "Hidrosur",
-    id: "csv-guiones",
-    buscamos: "formato de fecha dd-mm-yyyy",
-    url: "https://www.redhidrosurmedioambiente.es/saih/datos/a/la/carta/csv?datepickerini=25-08-2026&datepickerfin=26-08-2026&estacion=6&sensor=006P01",
-    volcado: 500,
+    grupo: "Júcar embalses",
+    id: "contexto-endpoints",
+    buscamos: "cómo se llama a embalse-datos-vol: método, ruta completa y argumentos",
+    url: "https://saih.chj.es/embalses",
+    extraer: ".{110}embalse-datos-(?:vol|cot).{110}",
   },
   {
-    grupo: "Hidrosur",
-    id: "csv-con-hora",
-    buscamos: "formato de fecha dd/mm/yyyy hh:mm",
-    url: "https://www.redhidrosurmedioambiente.es/saih/datos/a/la/carta/csv?datepickerini=25%2F08%2F2026%2000%3A00&datepickerfin=26%2F08%2F2026%2000%3A00&estacion=6&sensor=006P01",
-    volcado: 500,
+    grupo: "Júcar aforos",
+    id: "contexto-endpoints",
+    buscamos: "cómo se llama a aforo-datos-ultimo y a aforo-datos-umbrales",
+    url: "https://saih.chj.es/aforos",
+    extraer: ".{110}aforo-datos-(?:ultimo|umbrales).{110}",
+  },
+  {
+    grupo: "Júcar aforos",
+    id: "variables",
+    buscamos: "si los aforos también vienen embebidos, con sus coordenadas",
+    url: "https://saih.chj.es/aforos",
+    extraer: "(?:var|let|const)\\s+[\\w$]+\\s*=\\s*(?:JSON\\.parse\\()?[\\[\'\"]",
   },
 ];
 
