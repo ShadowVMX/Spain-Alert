@@ -28,75 +28,61 @@ interface Candidato {
   buscamos: string;
   url: string;
   headers?: Record<string, string>;
+  /** Caracteres de respuesta cruda a imprimir. Para cuando el resumen no basta y hay
+   *  que leer el HTML a mano para deducir por dónde pide los datos un visor. */
+  volcado?: number;
+  /** Desde qué carácter volcar. El `<head>` de un visor son kilobytes de CSS; lo que
+   *  interesa suele estar más abajo. */
+  volcadoDesde?: number;
+  /** Patrón cuyas coincidencias se listan. Es la forma de sacar los nombres de los
+   *  campos de un formulario, o las rutas de los bundles de JavaScript, sin tener
+   *  que volcar el documento entero. */
+  extraer?: string;
+  /** Método y cuerpo, para los endpoints que solo responden a POST. */
+  metodo?: string;
+  cuerpo?: Record<string, string>;
 }
 
 const CANDIDATOS: Candidato[] = [
-  // === RONDA 2 =============================================================
-  // La ronda 1 descartó lo que no existe y dejó tres pistas buenas. Esto va a por
-  // ellas.
+  // === RONDA 6 =============================================================
+  // Dos cabos sueltos, los dos a un paso de cerrarse.
+  //
+  // Júcar: confirmado que la raíz declara `let estaciones = [{"idEstacion...`, con
+  // toda la red de pluviómetros de la cuenca. Pero la raíz es el mapa de LLUVIA;
+  // los embalses y los aforos estarán en otra ruta. El menú lateral no la delató,
+  // así que se prueban las evidentes.
+  { grupo: "SAIH Júcar", id: "rutaembalses", buscamos: "página de embalses o aforos", url: "https://saih.chj.es/embalses", extraer: "let \\w+ = \\[\\{" },
+  { grupo: "SAIH Júcar", id: "rutaaforos", buscamos: "página de embalses o aforos", url: "https://saih.chj.es/aforos", extraer: "let \\w+ = \\[\\{" },
+  { grupo: "SAIH Júcar", id: "rutaembalse", buscamos: "página de embalses o aforos", url: "https://saih.chj.es/embalse", extraer: "let \\w+ = \\[\\{" },
+  { grupo: "SAIH Júcar", id: "rutaaforo", buscamos: "página de embalses o aforos", url: "https://saih.chj.es/aforo", extraer: "let \\w+ = \\[\\{" },
+  { grupo: "SAIH Júcar", id: "rutanivel", buscamos: "página de embalses o aforos", url: "https://saih.chj.es/nivel", extraer: "let \\w+ = \\[\\{" },
+  { grupo: "SAIH Júcar", id: "rutacaudal", buscamos: "página de embalses o aforos", url: "https://saih.chj.es/caudal", extraer: "let \\w+ = \\[\\{" },
+  { grupo: "SAIH Júcar", id: "rutalluvia", buscamos: "página de embalses o aforos", url: "https://saih.chj.es/lluvia", extraer: "let \\w+ = \\[\\{" },
 
-  // --- ACA: hay un conjunto EN TIEMPO REAL ---------------------------------
-  // El catálogo lo destapó: junto al conjunto diario que ya usamos hay otro
-  // titulado "(dades en temps real)". Es justo lo que falta, porque un dato
-  // diario no sirve durante una DANA: el embalse cambia en horas.
-  {
-    grupo: "ACA tiempo real",
-    id: "vjx7-datos",
-    buscamos: "campos y coordenadas del conjunto en tiempo real",
-    url: "https://analisi.transparenciacatalunya.cat/resource/vjx7-6kcp.json?$limit=3",
-  },
-  {
-    grupo: "ACA tiempo real",
-    id: "vjx7-metadatos",
-    buscamos: "cada cuánto se actualiza de verdad y cómo se llaman sus columnas",
-    url: "https://analisi.transparenciacatalunya.cat/api/views/vjx7-6kcp.json",
-  },
-  {
-    grupo: "ACA tiempo real",
-    id: "39c7-volum",
-    buscamos: "el otro conjunto de volumen por embalse, por si trae la capacidad",
-    url: "https://analisi.transparenciacatalunya.cat/resource/39c7-5ydt.json?$limit=3",
-  },
-
-  // --- Hidrosur (Andalucía): el visor sirve sus capas como JSON suelto ------
-  // El HTML del visor delataba las rutas. Si estos archivos son GeoJSON, ahí
-  // están las coordenadas de embalses y aforos de toda la cuenca mediterránea
-  // andaluza, sin clave y sin scraping.
+  // Hidrosur: `datepickerini` y `datepickerfin` SON los nombres buenos — el error
+  // cambió de "son requeridos" a "las fechas no son correctas" — así que solo
+  // falla el formato. Se prueban los tres habituales.
   {
     grupo: "Hidrosur",
-    id: "capa-embalses-punto",
-    buscamos: "embalses como puntos: nombre + coordenadas",
-    url: "https://www.redhidrosurmedioambiente.es/saih/assets/visorSAIH/capas/Embalses_pto.json",
+    id: "csv-iso",
+    buscamos: "formato de fecha yyyy-mm-dd",
+    url: "https://www.redhidrosurmedioambiente.es/saih/datos/a/la/carta/csv?datepickerini=2026-08-25&datepickerfin=2026-08-26&estacion=6&sensor=006P01",
+    volcado: 500,
   },
   {
     grupo: "Hidrosur",
-    id: "capa-aforos",
-    buscamos: "aforos: el caudal del río es mejor señal de riada que la lluvia",
-    url: "https://www.redhidrosurmedioambiente.es/saih/assets/visorSAIH/capas/Aforos.json",
+    id: "csv-guiones",
+    buscamos: "formato de fecha dd-mm-yyyy",
+    url: "https://www.redhidrosurmedioambiente.es/saih/datos/a/la/carta/csv?datepickerini=25-08-2026&datepickerfin=26-08-2026&estacion=6&sensor=006P01",
+    volcado: 500,
   },
   {
     grupo: "Hidrosur",
-    id: "capa-pluviometricas",
-    buscamos: "pluviómetros de la red, más densos que los de AEMET en la zona",
-    url: "https://www.redhidrosurmedioambiente.es/saih/assets/visorSAIH/capas/Pluviometricas.json",
+    id: "csv-con-hora",
+    buscamos: "formato de fecha dd/mm/yyyy hh:mm",
+    url: "https://www.redhidrosurmedioambiente.es/saih/datos/a/la/carta/csv?datepickerini=25%2F08%2F2026%2000%3A00&datepickerfin=26%2F08%2F2026%2000%3A00&estacion=6&sensor=006P01",
+    volcado: 500,
   },
-  {
-    grupo: "Hidrosur",
-    id: "datos-a-la-carta",
-    buscamos: "el endpoint que sirve las LECTURAS, no solo la geometría",
-    url: "https://www.redhidrosurmedioambiente.es/saih/datos/a/la/carta",
-  },
-
-  // --- SAIH Júcar: el host vive, las rutas eran mías -----------------------
-  // Respondió "Cannot GET /chj/saih/": es un Express, así que el servidor está
-  // levantado y sirve otra cosa. Hay que encontrar qué.
-  { grupo: "SAIH Júcar", id: "raiz-dominio", buscamos: "el visor de verdad y las rutas que llame por dentro", url: "https://saih.chj.es/" },
-  { grupo: "SAIH Júcar", id: "chj", buscamos: "otro punto de entrada", url: "https://saih.chj.es/chj/" },
-
-  // --- MITECO: ver el directorio ArcGIS entero ----------------------------
-  // Respondió 200 con {currentVersion, folders, services} en 260 bytes, pero el
-  // resumen de la ronda 1 se comió justo los nombres. Ahora se vuelca literal.
-  { grupo: "MITECO", id: "arcgis-directorio", buscamos: "los nombres de las carpetas y servicios", url: "https://sig.mapama.gob.es/arcgis/rest/services?f=json" },
 ];
 
 // --- Resumen de la respuesta ------------------------------------------------
@@ -202,6 +188,20 @@ function resumirTexto(texto: string, tipo: string): string[] {
   } else {
     lineas.push(`  sin rutas de datos evidentes (${texto.length} bytes de HTML)`);
   }
+
+  // Las rutas sueltas no bastan cuando el visor arma la URL por trozos. Lo que
+  // hace falta ver es la LLAMADA con lo que tiene alrededor.
+  const llamadas = [
+    ...texto.slice(0, MAX_TEXTO_ESCANEADO).matchAll(/(fetch\s*\(|\$\.(?:get|post|ajax|getJSON)|axios\.\w+|XMLHttpRequest|\burl\s*:)/g),
+  ];
+  if (llamadas.length > 0) {
+    lineas.push(`  ${llamadas.length} llamadas a datos; contexto de las primeras:`);
+    for (const m of llamadas.slice(0, 8)) {
+      const desde = Math.max(0, (m.index ?? 0) - 40);
+      const trozo = texto.slice(desde, (m.index ?? 0) + 160).replace(/\s+/g, " ");
+      lineas.push(`    · …${trozo}…`);
+    }
+  }
   return lineas;
 }
 
@@ -212,7 +212,14 @@ async function sondear(c: Candidato): Promise<string[]> {
   const t0 = Date.now();
   try {
     res = await fetch(c.url, {
-      headers: { "User-Agent": "Alerta-Espana/sonda (proyecto abierto de avisos de riada)", Accept: "*/*", ...c.headers },
+      method: c.metodo ?? "GET",
+      headers: {
+        "User-Agent": "Alerta-Espana/sonda (proyecto abierto de avisos de riada)",
+        Accept: "*/*",
+        ...(c.cuerpo ? { "Content-Type": "application/x-www-form-urlencoded" } : {}),
+        ...c.headers,
+      },
+      body: c.cuerpo ? new URLSearchParams(c.cuerpo).toString() : undefined,
       signal: AbortSignal.timeout(TIMEOUT_MS),
     });
   } catch (err) {
@@ -233,6 +240,19 @@ async function sondear(c: Candidato): Promise<string[]> {
     lineas.push(...resumirJson(texto));
   } else {
     lineas.push(...resumirTexto(texto, tipo));
+  }
+
+  if (c.extraer) {
+    const encontrados = [...new Set([...texto.matchAll(new RegExp(c.extraer, "g"))].map((m) => m[0]))];
+    lineas.push(`  coincidencias de /${c.extraer}/ (${encontrados.length} distintas):`);
+    for (const e of encontrados.slice(0, 60)) lineas.push(`    · ${e}`);
+  }
+
+  if (c.volcado) {
+    const desde = c.volcadoDesde ?? 0;
+    lineas.push(`  --- ${c.volcado} caracteres desde el ${desde} ---`);
+    for (const l of texto.slice(desde, desde + c.volcado).split("\n")) lineas.push(`  | ${l}`);
+    lineas.push("  --- fin del volcado ---");
   }
 
   lineas.push("");
