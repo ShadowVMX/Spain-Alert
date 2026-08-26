@@ -17,6 +17,11 @@ permissions:
 jobs:
   sondar:
     runs-on: ubuntu-latest
+    # La clave de AEMET está guardada como secreto DEL ENTORNO github-pages, no del
+    # repositorio: solo la ven los jobs que declaran ese entorno. Sin esta línea la
+    # sonda recibía la variable vacía y abortaba antes de preguntar nada.
+    environment:
+      name: github-pages
     steps:
       - uses: actions/checkout@v4
 
@@ -27,5 +32,12 @@ jobs:
       - name: Instalar dependencias del servidor
         run: npm --prefix server ci || npm --prefix server install
 
-      - name: Sondear
+      - name: Sondear fuentes hidrológicas
         run: npm --prefix server run sondar-fuentes
+
+      - name: Sondear la API de predicción de AEMET
+        env:
+          # Mismo juego de nombres que acepta el despliegue: la clave puede estar
+          # guardada como AEMET_KEY, y con un solo nombre la sonda llegaba vacía.
+          AEMET_API_KEY: ${{ secrets.AEMET_API_KEY || secrets.AEMET_KEY || vars.AEMET_API_KEY || vars.AEMET_KEY }}
+        run: npm --prefix server run sondar-prediccion
