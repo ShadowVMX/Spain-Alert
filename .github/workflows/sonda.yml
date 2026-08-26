@@ -27,5 +27,10 @@ jobs:
       - name: Instalar dependencias del servidor
         run: npm --prefix server ci || npm --prefix server install
 
-      - name: Sondear
+      - name: Sondear fuentes hidrológicas
         run: npm --prefix server run sondar-fuentes
+
+      - name: Sondear la API de predicción de AEMET
+        env:
+          AEMET_API_KEY: ${{ secrets.AEMET_API_KEY }}
+        run: npm --prefix server run sondar-prediccion

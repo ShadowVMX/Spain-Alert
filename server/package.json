@@ -10,7 +10,8 @@
     "generar-datos": "tsx src/scripts/generarDatos.ts",
     "sondar-fuentes": "tsx src/scripts/sondaFuentes.ts",
     "test": "tsx src/pruebas/embalses.prueba.ts && tsx src/pruebas/avisos.prueba.ts && tsx src/pruebas/estaciones.prueba.ts",
-    "typecheck": "tsc -p tsconfig.json --noEmit"
+    "typecheck": "tsc -p tsconfig.json --noEmit",
+    "sondar-prediccion": "tsx src/scripts/sondaPrediccion.ts"
   },
   "dependencies": {
     "@turf/turf": "^7.1.0",
