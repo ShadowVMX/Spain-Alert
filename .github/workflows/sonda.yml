@@ -17,6 +17,11 @@ permissions:
 jobs:
   sondar:
     runs-on: ubuntu-latest
+    # La clave de AEMET está guardada como secreto DEL ENTORNO github-pages, no del
+    # repositorio: solo la ven los jobs que declaran ese entorno. Sin esta línea la
+    # sonda recibía la variable vacía y abortaba antes de preguntar nada.
+    environment:
+      name: github-pages
     steps:
       - uses: actions/checkout@v4
 
