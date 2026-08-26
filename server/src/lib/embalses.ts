@@ -1,3 +1,4 @@
+import proj4 from "proj4";
 import type { GeoFeature, GeoFeatureCollection } from "./types.js";
 
 /**
@@ -100,6 +101,28 @@ function caeEnEspana(lon: number, lat: number): boolean {
 }
 
 /**
+ * ACA publica la posición en UTM, no en latitud y longitud. Catalunya va en el huso
+ * 31 Norte sobre ETRS89 (EPSG:25831).
+ *
+ * Comprobado contra un punto conocido: la presa de Darnius Boadella está en
+ * (486262, 4687606), que se convierte en 42.3406 N, 2.8332 E — a unos 900 m del
+ * punto que publican IGN y Wikipedia para esa presa, que es la diferencia esperable
+ * entre el sensor del SAIH, situado en el muro, y el punto con el que se rotula el
+ * embalse en un mapa.
+ *
+ * Devuelve null si la conversión no cae sobre España: antes que dibujar un embalse
+ * en el sitio equivocado, no se dibuja.
+ */
+const UTM31N_ETRS89 = "+proj=utm +zone=31 +ellps=GRS80 +towgs84=0,0,0,0,0,0,0 +units=m +no_defs";
+
+function utmCatalunyaAWgs84(x: number, y: number): [number, number] | null {
+  if (!Number.isFinite(x) || !Number.isFinite(y)) return null;
+  const [lon, lat] = proj4(UTM31N_ETRS89, "WGS84", [x, y]);
+  if (!Number.isFinite(lon) || !Number.isFinite(lat) || !caeEnEspana(lon, lat)) return null;
+  return [Math.round(lon * 1e6) / 1e6, Math.round(lat * 1e6) / 1e6];
+}
+
+/**
  * Calcula el llenado. Si el porcentaje viene dado se usa tal cual; si no, se deduce
  * de volumen y capacidad. Un volumen absurdamente mayor que la capacidad significa
  * que se han emparejado mal los campos, y entonces es preferible no dar ningún dato.
@@ -136,21 +159,32 @@ export interface FuenteEmbalses {
 }
 
 /**
- * Agència Catalana de l'Aigua, vía el portal de datos abiertos de la Generalitat.
- * Es la única fuente encontrada hasta ahora con API pública y documentada: el
- * portal usa Socrata, que expone cada conjunto como JSON y sin clave.
+ * Agència Catalana de l'Aigua, conjunto EN TIEMPO REAL.
  *
- * Cubre solo las cuencas internas de Catalunya, no el Ebro ni las mediterráneas.
- * Sirve para tener la capa viva y verificar la tubería entera con datos reales
- * mientras se resuelven las cuencas donde caen las DANAs.
+ * Antes usábamos el conjunto diario `gn9e-3qhr`, que no traía coordenadas y además
+ * era inútil para lo que hace esta app: durante una DANA un embalse cambia en
+ * horas, no en días. El sondeo del catálogo destapó este otro, con marca de tiempo
+ * propia en cada lectura y con la posición de la estación.
+ *
+ * Viene en formato largo: una fila por estación, variable e instante.
+ *
+ *   dia, hora, codi_estacio, estacio, conca, subconca,
+ *   utm_x, utm_y, tipus_variable, codi_variable, descripcio_variable,
+ *   nivell_qualitat, valor, unitat_mesura
+ *
+ * Así que hay que pivotarlo: agrupar por estación, quedarse con su lectura más
+ * reciente y cruzar las variables de esa lectura.
  */
 const ACA: FuenteEmbalses = {
   id: "aca",
   nombre: "Agència Catalana de l'Aigua",
   cobertura: "Cuencas internas de Catalunya",
-  frecuencia: "diaria",
+  frecuencia: "tiempo real",
   async obtener(diagnostico) {
-    const url = "https://analisi.transparenciacatalunya.cat/resource/gn9e-3qhr.json?$limit=2000&$order=dia%20DESC";
+    const url =
+      "https://analisi.transparenciacatalunya.cat/resource/vjx7-6kcp.json" +
+      "?$limit=5000&$order=" + encodeURIComponent("dia DESC, hora DESC");
+
     let res: Response;
     try {
       res = await fetch(url, { headers: { Accept: "application/json" } });
@@ -160,59 +194,93 @@ const ACA: FuenteEmbalses = {
     }
     if (!res.ok) throw new Error(`HTTP ${res.status}`);
 
-    const filas = (await res.json()) as Record<string, unknown>[];
+    const filas = (await res.json()) as FilaAca[];
     if (!Array.isArray(filas) || filas.length === 0) throw new Error("la consulta no devolvió filas");
 
-    // Los nombres de campo reales son lo más valioso para ajustar la detección sin
-    // adivinar, así que quedan registrados.
-    diagnostico.push(`  campos: ${Object.keys(filas[0]).join(", ")}`);
-
-    // Cada embalse aparece muchas veces, una por fecha. Nos quedamos con la más
-    // reciente de cada uno: mezclar fechas daría un mapa incoherente.
-    const porEmbalse = new Map<string, Record<string, unknown>>();
+    // Agrupamos por estación y nos quedamos solo con su instante más reciente.
+    // Mezclar lecturas de horas distintas dentro de un mismo embalse daría un
+    // porcentaje y un volumen que no se corresponden entre sí.
+    const porEstacion = new Map<string, FilaAca[]>();
     for (const fila of filas) {
-      const nombre = campoTexto(fila, ["estaci", "embassament", "embalse", "nom"]);
-      if (nombre && !porEmbalse.has(nombre)) porEmbalse.set(nombre, fila);
+      if (!fila.codi_estacio) continue;
+      const previas = porEstacion.get(fila.codi_estacio);
+      if (previas) previas.push(fila);
+      else porEstacion.set(fila.codi_estacio, [fila]);
     }
 
     const features: GeoFeature<EmbalseProperties>[] = [];
     let sinCoordenadas = 0;
+    let sinNivel = 0;
+    let masReciente = "";
 
-    for (const [nombre, fila] of porEmbalse) {
-      const lat = campoNumerico(fila, ["latitud", "lat"]);
-      const lon = campoNumerico(fila, ["longitud", "lon", "lng"]);
+    for (const [codigo, lecturas] of porEstacion) {
+      const instante = (f: FilaAca) => `${(f.dia ?? "").slice(0, 10)} ${f.hora ?? ""}`;
+      const ultimo = lecturas.reduce((max, f) => (instante(f) > max ? instante(f) : max), "");
+      const actuales = lecturas.filter((f) => instante(f) === ultimo);
+      if (ultimo > masReciente) masReciente = ultimo;
 
-      // Sin coordenadas no se puede dibujar, y no se inventan.
-      if (lat === null || lon === null || !caeEnEspana(lon, lat)) {
+      const referencia = actuales[0];
+      const lon_lat = utmCatalunyaAWgs84(Number(referencia.utm_x), Number(referencia.utm_y));
+      if (!lon_lat) {
         sinCoordenadas++;
         continue;
       }
 
-      const { pct, vol, cap } = calcularLlenado(fila);
+      // La unidad manda sobre el nombre de la variable: es el dato que la propia
+      // fuente da para decir qué está midiendo, y no depende de cómo lo titule.
+      const pct = valorConUnidad(actuales, "%");
+      const vol = valorConUnidad(actuales, "hm³");
+      if (pct === null) sinNivel++;
+
       features.push({
         type: "Feature",
-        geometry: { type: "Point", coordinates: [lon, lat] },
+        geometry: { type: "Point", coordinates: lon_lat },
         properties: {
-          id: `aca-${normalizar(nombre).replace(/\s+/g, "-")}`,
-          nombre,
-          cuenca: "Cuencas internas de Catalunya",
+          id: `aca-${codigo}`,
+          // El nombre viene como "Embassament de Darnius Boadella (Darnius)".
+          nombre: (referencia.estacio ?? codigo).replace(/^Embassament (de |d')?/i, "").trim(),
+          cuenca: referencia.conca ?? "Cuencas internas de Catalunya",
           volumenActual_hm3: vol,
-          capacidadTotal_hm3: cap,
+          capacidadTotal_hm3: null, // El conjunto no la trae; el porcentaje ya viene dado.
           porcentaje: pct,
           estado: clasificarEmbalse(pct),
-          fecha: campoTexto(fila, ["dia", "data", "fecha"]),
-          fuente: "ACA",
+          // Hora local publicada por ACA. No la convertimos a UTC porque no está
+          // documentado el huso y una hora inventada es peor que una hora sin husos.
+          fecha: ultimo,
+          fuente: "ACA (tiempo real)",
         },
       });
     }
 
-    diagnostico.push(`  ${porEmbalse.size} embalses distintos, ${features.length} con coordenadas usables`);
-    if (sinCoordenadas > 0) {
-      diagnostico.push(`  ⚠️ ${sinCoordenadas} descartados por no traer coordenadas: harán falta de otra fuente`);
-    }
+    diagnostico.push(`  ${porEstacion.size} estaciones, ${features.length} publicadas`);
+    diagnostico.push(`  lectura más reciente: ${masReciente} (hora local de ACA)`);
+    if (sinCoordenadas > 0) diagnostico.push(`  ⚠️ ${sinCoordenadas} descartadas por coordenadas no utilizables`);
+    if (sinNivel > 0) diagnostico.push(`  ⚠️ ${sinNivel} publicadas sin porcentaje de llenado`);
     return features;
   },
 };
+
+interface FilaAca {
+  dia?: string;
+  hora?: string;
+  codi_estacio?: string;
+  estacio?: string;
+  conca?: string;
+  utm_x?: string;
+  utm_y?: string;
+  valor?: string;
+  unitat_mesura?: string;
+}
+
+/** Busca entre las lecturas de un instante la que se publica en la unidad pedida. */
+function valorConUnidad(lecturas: FilaAca[], unidad: string): number | null {
+  for (const l of lecturas) {
+    if (l.unitat_mesura !== unidad) continue;
+    const n = Number(l.valor);
+    if (Number.isFinite(n)) return Math.round(n * 1000) / 1000;
+  }
+  return null;
+}
 
 /** Cuencas integradas. Se van añadiendo una a una según se localiza su API. */
 const FUENTES: FuenteEmbalses[] = [ACA];
