@@ -4,6 +4,7 @@ import path from "node:path";
 import { AemetAuthError, caducidadDeLaClave, getActiveWarnings, getWeatherStations } from "../lib/aemet.js";
 import { getRecentEarthquakes } from "../lib/earthquakes.js";
 import { getSaihLayerName, SAIH_LAYERS } from "../lib/saih.js";
+import { getEmbalses } from "../lib/embalses.js";
 import type { SaihCapa } from "../lib/saih.js";
 
 /**
@@ -91,6 +92,25 @@ async function generarSaih(): Promise<Resultado> {
   return { archivo: "saih.json", ok: okCount > 0, detalle: `${okCount}/${capas.length} capas descubiertas` };
 }
 
+/**
+ * Los embalses van aparte porque su descubrimiento es el más incierto de todos:
+ * el diagnóstico completo se vuelca al log para poder ajustar la detección de
+ * campos sin tener que adivinar desde fuera.
+ */
+async function generarEmbalses(): Promise<Resultado> {
+  try {
+    const { coleccion, diagnostico } = await getEmbalses();
+    for (const linea of diagnostico) console.log(`   ↳ ${linea}`);
+    await escribir("embalses.json", coleccion);
+    const conNivel = coleccion.features.filter((f) => f.properties.porcentaje !== null).length;
+    return { archivo: "embalses.json", ok: true, detalle: `${coleccion.features.length} embalses (${conNivel} con nivel)` };
+  } catch (err) {
+    await escribir("embalses.json", { type: "FeatureCollection", features: [], actualizado: new Date().toISOString(), error: (err as Error).message });
+    console.log(`   ↳ embalses: ${(err as Error).message}`);
+    return { archivo: "embalses.json", ok: false, detalle: (err as Error).message };
+  }
+}
+
 function abortar(motivo: string, detalle: string): never {
   console.error(`\n❌ ${motivo}`);
   console.error(`   ${detalle}`);
@@ -127,11 +147,12 @@ async function main() {
   console.log(`Generando datos en ${outDir}`);
   comprobarCaducidadClave();
 
-  const [avisos, estaciones, terremotos, saih] = await Promise.all([
+  const [avisos, estaciones, terremotos, saih, embalses] = await Promise.all([
     generar("avisos.json", getActiveWarnings),
     generar("estaciones.json", getWeatherStations),
     generar("terremotos.json", getRecentEarthquakes),
     generarSaih(),
+    generarEmbalses(),
   ]);
 
   await escribir("meta.json", {
@@ -141,10 +162,11 @@ async function main() {
       estaciones: estaciones.ok,
       terremotos: terremotos.ok,
       saih: saih.ok,
+      embalses: embalses.ok,
     },
   });
 
-  for (const r of [avisos, estaciones, terremotos, saih]) {
+  for (const r of [avisos, estaciones, terremotos, saih, embalses]) {
     console.log(`${r.ok ? "✅" : "⚠️ "} ${r.archivo}: ${r.detalle}`);
   }
 

@@ -1,6 +1,6 @@
 import { CircleMarker, GeoJSON, MapContainer, Popup, TileLayer, Tooltip } from "react-leaflet";
 import type { Layer } from "leaflet";
-import { HAZARD_ICON, HAZARD_LABEL, RAIN_INTENSITY_LABEL, SEVERITY_COLOR, rainIntensityColor } from "../types";
+import { EMBALSE_COLOR, EMBALSE_ETIQUETA, HAZARD_ICON, HAZARD_LABEL, RAIN_INTENSITY_LABEL, SEVERITY_COLOR, rainIntensityColor } from "../types";
 import type { SaihCapa } from "../types";
 import type { HazardData } from "../hooks/useHazardData";
 import type { RadarData } from "../hooks/useRadarFrames";
@@ -32,6 +32,20 @@ interface Props {
 // Solo late lo que de verdad es peligroso. Animar cada estación con algo de lluvia
 // llenaba el mapa de parpadeos y gastaba GPU sin aportar información.
 const LLUVIA_PELIGROSA_MM = 30;
+
+/**
+ * react-leaflet aplica `pathOptions` llamando a `setStyle()`, y `setStyle` de
+ * Leaflet ignora `className`: la clase nunca llegaba al SVG y las animaciones de
+ * los marcadores no se veían. Se añade al elemento cuando la capa entra al mapa.
+ */
+function claseAlAnadir(clase: string) {
+  return {
+    add: (e: { target: { getElement?: () => Element | null } }) => {
+      const el = e.target.getElement?.();
+      if (el) el.classList.add(...clase.split(" "));
+    },
+  };
+}
 
 export function MapView({ datos, radar, indiceRadar, opacidadRadar, capas, saihLayers, soloConLluvia, userPos }: Props) {
   const estaciones = (datos.estaciones?.features ?? []).filter(
@@ -107,8 +121,8 @@ export function MapView({ datos, radar, indiceRadar, opacidadRadar, capas, saihL
                 weight: intensa ? 2 : 1,
                 fillColor: rainIntensityColor(lluvia),
                 fillOpacity: lluvia > 0 ? 0.75 : 0.35,
-                className: intensa ? "estacion estacion--intensa" : "estacion",
               }}
+              eventHandlers={claseAlAnadir(intensa ? "estacion estacion--intensa" : "estacion")}
             >
               <Tooltip direction="top" offset={[0, -6]}>
                 <strong>{f.properties.nombre}</strong>
@@ -164,8 +178,8 @@ export function MapView({ datos, radar, indiceRadar, opacidadRadar, capas, saihL
                 color: fuerte ? "#f43f5e" : "#a78bfa",
                 weight: 1.5,
                 fillOpacity: 0.28,
-                className: fuerte ? "sismo sismo--fuerte" : "sismo",
               }}
+              eventHandlers={claseAlAnadir(fuerte ? "sismo sismo--fuerte" : "sismo")}
             >
               <Popup className="pop-wrap">
                 <div className="pop">
@@ -188,11 +202,79 @@ export function MapView({ datos, radar, indiceRadar, opacidadRadar, capas, saihL
           );
         })}
 
+      {capas.embalses &&
+        datos.embalses?.features.map((f) => {
+          const geom = f.geometry as GeoJSON.Point;
+          const p = f.properties;
+          const color = EMBALSE_COLOR[p.estado];
+          const sinMargen = p.estado === "rojo";
+          return (
+            <CircleMarker
+              key={p.id}
+              center={[geom.coordinates[1], geom.coordinates[0]]}
+              radius={sinMargen ? 8 : 6}
+              pathOptions={{
+                color,
+                weight: 2,
+                fillColor: color,
+                fillOpacity: 0.55,
+              }}
+              eventHandlers={claseAlAnadir(sinMargen ? "embalse embalse--lleno" : "embalse")}
+            >
+              <Tooltip direction="top" offset={[0, -6]}>
+                <strong>{p.nombre}</strong>
+                {p.porcentaje !== null ? ` · ${p.porcentaje}%` : " · sin dato"}
+              </Tooltip>
+              <Popup className="pop-wrap">
+                <div className="pop">
+                  <div className="pop-cabecera" style={{ background: color }}>
+                    💧 {EMBALSE_ETIQUETA[p.estado]}
+                  </div>
+                  <div className="pop-cuerpo">
+                    <strong>{p.nombre}</strong>
+                    <dl className="pop-datos">
+                      {p.porcentaje !== null && (
+                        <>
+                          <dt>Llenado</dt>
+                          <dd>{p.porcentaje}%</dd>
+                        </>
+                      )}
+                      {p.volumenActual_hm3 !== null && (
+                        <>
+                          <dt>Volumen</dt>
+                          <dd>{p.volumenActual_hm3} hm³</dd>
+                        </>
+                      )}
+                      {p.capacidadTotal_hm3 !== null && (
+                        <>
+                          <dt>Capacidad</dt>
+                          <dd>{p.capacidadTotal_hm3} hm³</dd>
+                        </>
+                      )}
+                      {p.cuenca && (
+                        <>
+                          <dt>Cuenca</dt>
+                          <dd>{p.cuenca}</dd>
+                        </>
+                      )}
+                    </dl>
+                    {sinMargen && (
+                      <p>Sin capacidad para absorber una crecida: si llueve fuerte, el agua pasa aguas abajo.</p>
+                    )}
+                    {p.fecha && <small>{p.fecha}</small>}
+                  </div>
+                </div>
+              </Popup>
+            </CircleMarker>
+          );
+        })}
+
       {userPos && (
         <CircleMarker
           center={[userPos.lat, userPos.lon]}
           radius={7}
-          pathOptions={{ color: "#fff", weight: 2, fillColor: "#22c55e", fillOpacity: 1, className: "yo" }}
+          pathOptions={{ color: "#fff", weight: 2, fillColor: "#22c55e", fillOpacity: 1 }}
+          eventHandlers={claseAlAnadir("yo")}
         >
           <Tooltip direction="top" offset={[0, -6]} permanent>
             Estás aquí

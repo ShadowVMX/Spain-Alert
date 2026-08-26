@@ -7,6 +7,7 @@ export interface CapasVisibles {
   avisos: boolean;
   estaciones: boolean;
   terremotos: boolean;
+  embalses: boolean;
 }
 
 interface Props {
@@ -95,7 +96,11 @@ export function ControlPanel({
           </section>
 
           <section className="panel-seccion">
-            <h3>Hidrología · SAIH</h3>
+            <h3>Hidrología</h3>
+            <Interruptor activo={capas.embalses} onClick={() => onCapa("embalses")} color="#22c55e">
+              Embalses (nivel de llenado)
+            </Interruptor>
+            <p className="panel-nota">Verde con margen · amarillo poco · rojo sin margen para una crecida.</p>
             {(Object.keys(SAIH_LABEL) as SaihCapa[]).map((capa) => (
               <Interruptor key={capa} activo={saihLayers.includes(capa)} onClick={() => onSaih(capa)} color="#22d3ee">
                 {SAIH_LABEL[capa]}
