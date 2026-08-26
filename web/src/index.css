@@ -480,6 +480,47 @@ input[type="range"]::-moz-range-thumb {
   transform: scale(1.07);
 }
 
+/* En el flujo normal, no posicionado: en móvil la barra superior se parte en dos
+   líneas y cualquier posición fija acababa tapando el botón de vigilancia. */
+.fps-meter {
+  align-self: flex-start;
+  margin: 0 0 0.5rem 0.9rem;
+  display: flex;
+  align-items: baseline;
+  gap: 0.3rem;
+  padding: 0.35rem 0.7rem;
+  border-radius: 999px;
+  border: 1px solid var(--panel-borde);
+  background: var(--panel);
+  backdrop-filter: var(--difuminado);
+  -webkit-backdrop-filter: var(--difuminado);
+  font-variant-numeric: tabular-nums;
+  box-shadow: var(--sombra);
+}
+
+.fps-valor {
+  font-size: 1rem;
+  font-weight: 700;
+  color: #fbbf24;
+}
+
+.fps-valor--ok {
+  color: #4ade80;
+}
+
+.fps-unidad {
+  font-size: 0.7rem;
+  color: var(--texto-tenue);
+}
+
+.fps-max {
+  font-size: 0.7rem;
+  color: var(--texto-tenue);
+  border-left: 1px solid var(--panel-borde);
+  padding-left: 0.4rem;
+  margin-left: 0.15rem;
+}
+
 .radar-velocidad {
   flex: none;
   min-width: 38px;

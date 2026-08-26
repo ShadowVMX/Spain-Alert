@@ -7,6 +7,7 @@ import { RadarTimeline } from "./components/RadarTimeline";
 import type { Velocidad } from "./components/RadarTimeline";
 import { AlertBanner } from "./components/AlertBanner";
 import { StaleBanner } from "./components/StaleBanner";
+import { FpsMeter } from "./components/FpsMeter";
 import { useGeolocation } from "./hooks/useGeolocation";
 import { useHazardData } from "./hooks/useHazardData";
 import { useNearbyAlerts } from "./hooks/useNearbyAlerts";
@@ -29,6 +30,7 @@ export default function App() {
   // Por defecto solo se ven las estaciones donde llueve: las ~800 de AEMET a la vez
   // llenan España de puntos grises que no dicen nada.
   const [soloConLluvia, setSoloConLluvia] = useState(true);
+  const [mostrarFps, setMostrarFps] = useState(false);
 
   const datos = useHazardData(refreshKey);
   const radar = useRadarFrames(refreshKey);
@@ -86,13 +88,17 @@ export default function App() {
           saihLayers={saihLayers}
           opacidadRadar={opacidadRadar}
           soloConLluvia={soloConLluvia}
+          mostrarFps={mostrarFps}
           nEstaciones={datos.estaciones?.features.length ?? 0}
           nConLluvia={(datos.estaciones?.features ?? []).filter((f) => (f.properties.precipitacion1h_mm ?? 0) > 0).length}
           onCapa={(clave) => setCapas((c) => ({ ...c, [clave]: !c[clave] }))}
           onSaih={(capa) => setSaihLayers((prev) => (prev.includes(capa) ? prev.filter((c) => c !== capa) : [...prev, capa]))}
           onOpacidadRadar={setOpacidadRadar}
           onSoloConLluvia={setSoloConLluvia}
+          onMostrarFps={setMostrarFps}
         />
+
+        {mostrarFps && <FpsMeter />}
 
         {capas.radar && (
           <RadarTimeline

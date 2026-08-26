@@ -46,6 +46,11 @@ export function MapView({ datos, radar, indiceRadar, opacidadRadar, capas, saihL
       zoomControl={false}
       worldCopyJump
       className="mapa"
+      // zoomSnap 0 permite zoom fraccional: el mapa deja de saltar de nivel en nivel
+      // y sigue el dedo de forma continua, que es lo que se percibe como fluidez.
+      zoomSnap={0}
+      zoomDelta={0.4}
+      wheelPxPerZoomLevel={90}
     >
       <TileLayer url={BASE_OSCURA} attribution={ATRIBUCION} />
 
