@@ -32,5 +32,7 @@ jobs:
 
       - name: Sondear la API de predicción de AEMET
         env:
-          AEMET_API_KEY: ${{ secrets.AEMET_API_KEY }}
+          # Mismo juego de nombres que acepta el despliegue: la clave puede estar
+          # guardada como AEMET_KEY, y con un solo nombre la sonda llegaba vacía.
+          AEMET_API_KEY: ${{ secrets.AEMET_API_KEY || secrets.AEMET_KEY || vars.AEMET_API_KEY || vars.AEMET_KEY }}
         run: npm --prefix server run sondar-prediccion
