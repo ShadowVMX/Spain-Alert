@@ -59,21 +59,37 @@ export class EmbalsesError extends Error {
 
 const normalizar = (s: string) => s.toLowerCase().normalize("NFD").replace(/[̀-ͯ]/g, "");
 
-/** Primera clave cuyo nombre contenga alguno de los términos y cuyo valor sea numérico. */
-function campoNumerico(props: Record<string, unknown>, terminos: string[]): number | null {
-  for (const [clave, valor] of Object.entries(props)) {
-    const n = normalizar(clave);
-    if (!terminos.some((t) => n.includes(t))) continue;
-    const num = typeof valor === "number" ? valor : typeof valor === "string" ? Number(valor.replace(",", ".")) : NaN;
-    if (Number.isFinite(num)) return num;
+/**
+ * Busca una clave cuyo nombre contenga alguno de los términos y cuyo valor sea
+ * numérico.
+ *
+ * El bucle exterior recorre los TÉRMINOS, no las claves: así manda el orden de
+ * prioridad que escribimos nosotros y no el orden en que la fuente serialice su
+ * JSON. Sin eso, en ACA el volumen lo resolvía `percentatge_volum_embassat`
+ * —que contiene "volum_embassat" y aparece antes— y habríamos enseñado un
+ * porcentaje etiquetado como hm³.
+ *
+ * `excluir` descarta claves que casan por accidente aunque midan otra cosa.
+ */
+function campoNumerico(props: Record<string, unknown>, terminos: string[], excluir: string[] = []): number | null {
+  for (const termino of terminos) {
+    for (const [clave, valor] of Object.entries(props)) {
+      const n = normalizar(clave);
+      if (!n.includes(termino)) continue;
+      if (excluir.some((e) => n.includes(e))) continue;
+      const num = typeof valor === "number" ? valor : typeof valor === "string" ? Number(valor.replace(",", ".")) : NaN;
+      if (Number.isFinite(num)) return num;
+    }
   }
   return null;
 }
 
+/** Igual que `campoNumerico`, con la prioridad en los términos. */
 function campoTexto(props: Record<string, unknown>, terminos: string[]): string | null {
-  for (const [clave, valor] of Object.entries(props)) {
-    const n = normalizar(clave);
-    if (terminos.some((t) => n.includes(t)) && typeof valor === "string" && valor.trim()) return valor.trim();
+  for (const termino of terminos) {
+    for (const [clave, valor] of Object.entries(props)) {
+      if (normalizar(clave).includes(termino) && typeof valor === "string" && valor.trim()) return valor.trim();
+    }
   }
   return null;
 }
@@ -88,9 +104,16 @@ function caeEnEspana(lon: number, lat: number): boolean {
  * de volumen y capacidad. Un volumen absurdamente mayor que la capacidad significa
  * que se han emparejado mal los campos, y entonces es preferible no dar ningún dato.
  */
-function calcularLlenado(props: Record<string, unknown>): { pct: number | null; vol: number | null; cap: number | null } {
-  const cap = campoNumerico(props, ["capacitat", "capacidad", "cap_total", "volum_total", "volumen_total"]);
-  const vol = campoNumerico(props, ["volum_embassat", "volumen_embalsado", "vol_actual", "volumen_actual", "embalsada", "volum", "volumen"]);
+export function calcularLlenado(props: Record<string, unknown>): { pct: number | null; vol: number | null; cap: number | null } {
+  // Un campo de porcentaje nunca es un volumen ni una capacidad, por muy parecido
+  // que sea su nombre: mezclarlos daría cifras sin sentido en la ficha del embalse.
+  const NO_ES_VOLUMEN = ["percentatge", "porcentaje", "percent", "pct"];
+  const cap = campoNumerico(props, ["capacitat", "capacidad", "cap_total", "volum_total", "volumen_total"], NO_ES_VOLUMEN);
+  const vol = campoNumerico(
+    props,
+    ["volum_embassat", "volumen_embalsado", "vol_actual", "volumen_actual", "embalsada", "volum", "volumen"],
+    NO_ES_VOLUMEN
+  );
   const directo = campoNumerico(props, ["percentatge", "porcentaje", "percent", "pct", "llenado", "ple"]);
 
   if (directo !== null && directo >= 0 && directo <= 100) return { pct: Math.round(directo * 10) / 10, vol, cap };

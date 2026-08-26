@@ -1,0 +1,31 @@
+name: Sondear fuentes de datos
+
+# El entorno de desarrollo no tiene salida a los portales hidrológicos: el proxy
+# devuelve 403 a todo lo que no sea GitHub o npm. Este workflow presta el runner
+# como banco de pruebas para averiguar qué devuelve de verdad cada endpoint antes
+# de escribir la integración.
+#
+# Solo se lanza a mano. No descarga nada para la web, no despliega y no toca los
+# datos publicados: si falla, la app sigue exactamente igual.
+
+on:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  sondar:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+
+      - name: Instalar dependencias del servidor
+        run: npm --prefix server ci || npm --prefix server install
+
+      - name: Sondear
+        run: npm --prefix server run sondar-fuentes

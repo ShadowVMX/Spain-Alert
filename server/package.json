@@ -8,6 +8,7 @@
     "build": "tsc -p tsconfig.json",
     "start": "node dist/index.js",
     "generar-datos": "tsx src/scripts/generarDatos.ts",
+    "sondar-fuentes": "tsx src/scripts/sondaFuentes.ts",
     "typecheck": "tsc -p tsconfig.json --noEmit"
   },
   "dependencies": {
