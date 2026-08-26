@@ -315,6 +315,21 @@ export async function getEmbalses(): Promise<ResultadoEmbalses> {
   const conNivel = features.filter((f) => f.properties.porcentaje !== null).length;
   diagnostico.push(`Total: ${features.length} embalses, ${conNivel} con nivel de llenado`);
 
+  // La lista completa, con posición. Es la única forma de comprobar desde fuera que
+  // cada embalse cae donde debe: un huso UTM equivocado o unos ejes cambiados
+  // colocarían la presa en otra comarca sin que nada fallara, y `caeEnEspana` solo
+  // detecta los disparates grandes. Con los nombres delante se contrasta a ojo
+  // contra cualquier mapa.
+  if (features.length > 0) {
+    diagnostico.push("Detalle:");
+    for (const f of features) {
+      const [lon, lat] = (f.geometry as GeoJSON.Point).coordinates;
+      const p = f.properties;
+      const nivel = p.porcentaje === null ? "sin dato" : `${p.porcentaje}%`;
+      diagnostico.push(`  ${p.nombre} — ${lat.toFixed(4)}, ${lon.toFixed(4)} — ${nivel} (${p.estado})`);
+    }
+  }
+
   if (features.length === 0) {
     throw new EmbalsesError("Ninguna fuente devolvió embalses utilizables", diagnostico);
   }
