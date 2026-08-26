@@ -4,7 +4,7 @@ import path from "node:path";
 import { AemetAuthError, caducidadDeLaClave, getActiveWarnings, getWeatherStations } from "../lib/aemet.js";
 import { getRecentEarthquakes } from "../lib/earthquakes.js";
 import { getSaihLayerName, SAIH_LAYERS } from "../lib/saih.js";
-import { getEmbalses } from "../lib/embalses.js";
+import { EmbalsesError, getEmbalses } from "../lib/embalses.js";
 import type { SaihCapa } from "../lib/saih.js";
 
 /**
@@ -124,6 +124,11 @@ async function generarEmbalses(): Promise<Resultado> {
     return { archivo: "embalses.json", ok: true, detalle: `${coleccion.features.length} embalses (${conNivel} con nivel)` };
   } catch (err) {
     await escribir("embalses.json", { type: "FeatureCollection", features: [], actualizado: new Date().toISOString(), error: (err as Error).message });
+    // El diagnóstico acumulado antes del fallo es lo más valioso que hay aquí.
+    if (err instanceof EmbalsesError) {
+      diagnosticoEmbalses.push(...err.diagnostico);
+      for (const linea of err.diagnostico) console.log(`   ↳ ${linea}`);
+    }
     diagnosticoEmbalses.push((err as Error).message);
     console.log(`   ↳ embalses: ${(err as Error).message}`);
     return { archivo: "embalses.json", ok: false, detalle: (err as Error).message };

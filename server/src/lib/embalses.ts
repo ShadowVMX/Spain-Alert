@@ -79,9 +79,12 @@ export async function descubrirColecciones(): Promise<{ todas: ColeccionOGC[]; c
 
   const json = (await res.json()) as { collections?: ColeccionOGC[] };
   const todas = json.collections ?? [];
+  // Se prueban varios términos porque el nombre real de la colección es una
+  // incógnita: puede venir en castellano, en inglés o con un código interno.
+  const TERMINOS = ["embalse", "presa", "reservoir", "dam", "hidro", "agua", "saih", "aforo"];
   const candidatas = todas.filter((c) => {
     const texto = `${c.id} ${c.title ?? ""} ${c.description ?? ""}`.toLowerCase();
-    return texto.includes("embalse") || texto.includes("presa");
+    return TERMINOS.some((t) => texto.includes(t));
   });
   return { todas, candidatas };
 }
@@ -113,6 +116,18 @@ function caeEnEspana(lon: number, lat: number): boolean {
   return lon > -19 && lon < 5 && lat > 27 && lat < 44;
 }
 
+/**
+ * Error que se lleva consigo el diagnóstico acumulado. Sin esto, al lanzar la
+ * excepción se perdía justo la información que hacía falta para corregir: la
+ * lista de colecciones que el servicio sí ofrece.
+ */
+export class EmbalsesError extends Error {
+  constructor(mensaje: string, readonly diagnostico: string[]) {
+    super(mensaje);
+    this.name = "EmbalsesError";
+  }
+}
+
 export interface ResultadoEmbalses {
   coleccion: FeatureCollectionEmbalses;
   diagnostico: string[];
@@ -127,9 +142,11 @@ export async function getEmbalses(): Promise<ResultadoEmbalses> {
   diagnostico.push(`${todas.length} colecciones en el servicio; ${candidatas.length} parecen de embalses`);
   for (const c of candidatas.slice(0, 5)) diagnostico.push(`  candidata: ${c.id} — ${c.title ?? "sin título"}`);
   if (candidatas.length === 0) {
-    // Sin candidatas, listamos algunas para poder corregir el filtro con datos ciertos.
-    for (const c of todas.slice(0, 15)) diagnostico.push(`  disponible: ${c.id} — ${c.title ?? ""}`);
-    throw new Error("Ninguna colección parece contener embalses. Revisa los ids listados arriba.");
+    // Se vuelcan TODAS las colecciones: sin la lista real no hay forma de saber
+    // cómo se llama la que buscamos, y adivinar es justo lo que no queremos hacer.
+    diagnostico.push("Ninguna colección coincide con los términos buscados. Las que ofrece el servicio son:");
+    for (const c of todas) diagnostico.push(`  · ${c.id}${c.title ? ` — ${c.title}` : ""}`);
+    throw new EmbalsesError(`Ninguna de las ${todas.length} colecciones parece de embalses`, diagnostico);
   }
 
   const features: GeoFeature<EmbalseProperties>[] = [];
@@ -203,7 +220,7 @@ export async function getEmbalses(): Promise<ResultadoEmbalses> {
   diagnostico.push(`Total: ${features.length} embalses, ${conPorcentaje} con nivel de llenado`);
 
   if (features.length === 0) {
-    throw new Error("No se obtuvo ningún embalse válido de las colecciones candidatas.");
+    throw new EmbalsesError("No se obtuvo ningún embalse válido de las colecciones candidatas", diagnostico);
   }
 
   return {
