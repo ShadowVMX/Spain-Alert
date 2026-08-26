@@ -31,52 +31,55 @@ interface Candidato {
   /** Caracteres de respuesta cruda a imprimir. Para cuando el resumen no basta y hay
    *  que leer el HTML a mano para deducir por dónde pide los datos un visor. */
   volcado?: number;
+  /** Desde qué carácter volcar. El `<head>` de un visor son kilobytes de CSS; lo que
+   *  interesa suele estar más abajo. */
+  volcadoDesde?: number;
+  /** Patrón cuyas coincidencias se listan. Es la forma de sacar los nombres de los
+   *  campos de un formulario, o las rutas de los bundles de JavaScript, sin tener
+   *  que volcar el documento entero. */
+  extraer?: string;
 }
 
 const CANDIDATOS: Candidato[] = [
-  // === RONDA 3 =============================================================
-  // Catalunya ya está integrada. Esto va a por las cuencas donde caen las DANAs
-  // y por las lecturas de Hidrosur, cuya geometría ya tenemos.
+  // === RONDA 4 =============================================================
+  // La ronda 3 dejó dos puertas entreabiertas y cerró una del todo.
 
-  // --- Júcar: el visor de la DANA de Valencia ------------------------------
-  // La raíz responde 200 con el visor entero, pero el extractor de rutas solo
-  // encontró librerías de CDN: la URL de datos la arma por trozos. Hay que leer
-  // el HTML y ver las llamadas con su contexto.
+  // --- Hidrosur: el endpoint de lecturas EXISTE ----------------------------
+  // `/datos/a/la/carta/csv` respondió 200 con "Fecha inicial y fecha final son
+  // requeridos". Está vivo y solo le faltan argumentos. Los nombres de esos
+  // argumentos están en el formulario del visor.
+  {
+    grupo: "Hidrosur",
+    id: "formulario",
+    buscamos: "los nombres de los campos del formulario, que son los argumentos del CSV",
+    url: "https://www.redhidrosurmedioambiente.es/saih/datos/a/la/carta",
+    extraer: '(?:name|id)="[A-Za-z][\\w.-]{1,40}"',
+  },
+  {
+    grupo: "Hidrosur",
+    id: "formulario-llamada",
+    buscamos: "cómo arma el visor la URL del CSV",
+    url: "https://www.redhidrosurmedioambiente.es/saih/datos/a/la/carta",
+    extraer: "(?:csv|fecha|Fecha)[A-Za-z]*\\s*[:=]",
+  },
+
+  // --- Júcar: usa OpenLayers, así que las capas se piden por JavaScript -----
+  // El volcado del `<head>` reveló OpenLayers 10.4 y proj4. Las llamadas están en
+  // sus bundles, no en el HTML. Primero hay que saber cuáles son.
   {
     grupo: "SAIH Júcar",
-    id: "visor-crudo",
-    buscamos: "cómo pide los datos el visor: la llamada, no solo la ruta",
+    id: "bundles",
+    buscamos: "las rutas de los JavaScript propios del visor",
     url: "https://saih.chj.es/",
-    volcado: 2500,
-  },
-  // Rutas plausibles para un Express. Cada 404 descarta una y cuesta un segundo.
-  { grupo: "SAIH Júcar", id: "datos", buscamos: "endpoint de datos", url: "https://saih.chj.es/datos" },
-  { grupo: "SAIH Júcar", id: "api", buscamos: "endpoint de datos", url: "https://saih.chj.es/api" },
-  { grupo: "SAIH Júcar", id: "estaciones", buscamos: "listado de estaciones con coordenadas", url: "https://saih.chj.es/estaciones" },
-  { grupo: "SAIH Júcar", id: "mapa", buscamos: "capa del mapa", url: "https://saih.chj.es/mapa" },
-
-  // --- Ebro: agotó el tiempo de espera desde el runner ---------------------
-  // Puede ser el host, el TLS o un filtro. Probamos variantes para saber cuál.
-  { grupo: "SAIH Ebro", id: "sin-www", buscamos: "si el timeout era cosa del subdominio", url: "https://saihebro.com/" },
-  { grupo: "SAIH Ebro", id: "http-plano", buscamos: "si el problema es el TLS y no la red", url: "http://www.saihebro.com/" },
-  { grupo: "CH Ebro", id: "chebro", buscamos: "la confederación, por si publica aparte del SAIH", url: "https://www.chebro.es/" },
-
-  // --- Hidrosur: ya tenemos la geometría, faltan las LECTURAS --------------
-  // El visor delató estas dos rutas. Si alguna sirve valores por estación, se
-  // cruza con las capas GeoJSON que ya localizamos y entra Andalucía entera.
-  {
-    grupo: "Hidrosur",
-    id: "parametros",
-    buscamos: "qué variables se pueden pedir y con qué códigos",
-    url: "https://www.redhidrosurmedioambiente.es/saih/datos/a/la/carta/parametros",
-    volcado: 1200,
+    extraer: 'src="/(?!vendor)[\\w./-]+\\.js"',
   },
   {
-    grupo: "Hidrosur",
-    id: "csv-sin-argumentos",
-    buscamos: "qué argumentos exige el endpoint de descarga",
-    url: "https://www.redhidrosurmedioambiente.es/saih/datos/a/la/carta/csv",
-    volcado: 800,
+    grupo: "SAIH Júcar",
+    id: "cuerpo",
+    buscamos: "el resto del documento, pasado el <head> de hojas de estilo",
+    url: "https://saih.chj.es/",
+    volcado: 2000,
+    volcadoDesde: 90000,
   },
 ];
 
@@ -230,9 +233,16 @@ async function sondear(c: Candidato): Promise<string[]> {
     lineas.push(...resumirTexto(texto, tipo));
   }
 
+  if (c.extraer) {
+    const encontrados = [...new Set([...texto.matchAll(new RegExp(c.extraer, "g"))].map((m) => m[0]))];
+    lineas.push(`  coincidencias de /${c.extraer}/ (${encontrados.length} distintas):`);
+    for (const e of encontrados.slice(0, 60)) lineas.push(`    · ${e}`);
+  }
+
   if (c.volcado) {
-    lineas.push(`  --- primeros ${c.volcado} caracteres en crudo ---`);
-    for (const l of texto.slice(0, c.volcado).split("\n")) lineas.push(`  | ${l}`);
+    const desde = c.volcadoDesde ?? 0;
+    lineas.push(`  --- ${c.volcado} caracteres desde el ${desde} ---`);
+    for (const l of texto.slice(desde, desde + c.volcado).split("\n")) lineas.push(`  | ${l}`);
     lineas.push("  --- fin del volcado ---");
   }
 
