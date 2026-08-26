@@ -480,6 +480,30 @@ input[type="range"]::-moz-range-thumb {
   transform: scale(1.07);
 }
 
+.radar-velocidad {
+  flex: none;
+  min-width: 38px;
+  padding: 0.3rem 0.45rem;
+  border-radius: 999px;
+  border: 1px solid var(--panel-borde);
+  background: rgba(148, 163, 184, 0.12);
+  font-size: 0.76rem;
+  font-weight: 650;
+  font-variant-numeric: tabular-nums;
+  color: #7dd3fc;
+  transition: background 0.15s ease;
+}
+
+.radar-velocidad:hover {
+  background: rgba(148, 163, 184, 0.22);
+}
+
+.panel-nota {
+  margin: 0.15rem 0 0 0.45rem;
+  font-size: 0.7rem;
+  color: var(--texto-tenue);
+}
+
 .radar-pista {
   position: relative;
   flex: 1;
