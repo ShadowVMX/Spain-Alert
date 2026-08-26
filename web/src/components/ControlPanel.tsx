@@ -14,12 +14,14 @@ interface Props {
   saihLayers: SaihCapa[];
   opacidadRadar: number;
   soloConLluvia: boolean;
+  mostrarFps: boolean;
   nEstaciones: number;
   nConLluvia: number;
   onCapa: (clave: keyof CapasVisibles) => void;
   onSaih: (capa: SaihCapa) => void;
   onOpacidadRadar: (v: number) => void;
   onSoloConLluvia: (v: boolean) => void;
+  onMostrarFps: (v: boolean) => void;
 }
 
 const ESCALA: { mm: number; etiqueta: string }[] = [
@@ -35,12 +37,14 @@ export function ControlPanel({
   saihLayers,
   opacidadRadar,
   soloConLluvia,
+  mostrarFps,
   nEstaciones,
   nConLluvia,
   onCapa,
   onSaih,
   onOpacidadRadar,
   onSoloConLluvia,
+  onMostrarFps,
 }: Props) {
   const [abierto, setAbierto] = useState(false);
 
@@ -104,6 +108,14 @@ export function ControlPanel({
             <Interruptor activo={capas.terremotos} onClick={() => onCapa("terremotos")} color="#a78bfa">
               Terremotos recientes
             </Interruptor>
+          </section>
+
+          <section className="panel-seccion">
+            <h3>Rendimiento</h3>
+            <Interruptor activo={mostrarFps} onClick={() => onMostrarFps(!mostrarFps)} color="#4ade80">
+              Mostrar fluidez (fps)
+            </Interruptor>
+            <p className="panel-nota">Compara los fps con los Hz de tu pantalla para ver quién limita.</p>
           </section>
 
           <section className="panel-seccion">
