@@ -181,28 +181,56 @@ export async function getWeatherStations(): Promise<GeoFeatureCollection<Weather
 
 // --- Avisos CAP (DANA, lluvia torrencial, viento, tormentas, costero, nieve...) ---------
 
+/**
+ * Traducción de la severidad CAP genérica. Es solo el PLAN B: el nivel oficial
+ * viaja aparte, en <parameter valueName="AEMET-Meteoalerta nivel">, y ese es el
+ * que manda.
+ *
+ * Importa acertar la correspondencia porque en el perfil de AEMET un aviso
+ * NARANJA se manda como severity=Severe. Traducir Severe a rojo convertía todos
+ * los naranjas en rojos: la app se pasaría el día gritando el nivel máximo, y una
+ * app que grita siempre deja de mirarse.
+ */
 const SEVERITY_MAP: Record<string, Severity> = {
-  Minor: "amarillo",
-  Moderate: "naranja",
-  Severe: "rojo",
+  Minor: "verde",
+  Moderate: "amarillo",
+  Severe: "naranja",
   Extreme: "rojo",
 };
 
-// Códigos de fenómeno AEMET-Meteoalerta (parameter valueName="AEMET-Meteoalerta phenomenon").
+/** El nivel tal y como lo publica AEMET, que no hay que interpretar. */
+const NIVEL_MAP: Record<string, Severity> = {
+  verde: "verde",
+  amarillo: "amarillo",
+  naranja: "naranja",
+  rojo: "rojo",
+};
+
+/**
+ * Códigos de fenómeno de AEMET-Meteoalerta. Van en <eventCode>, no en
+ * <parameter>, y el valor tiene la forma "PR;Lluvia": lo que sirve es la sigla.
+ *
+ * Antes aquí había un mapa de dígitos ("1", "2"...) que ningún aviso real usa,
+ * así que nunca se llegó a leer el código y todo dependía de adivinarlo por el
+ * texto del <event>.
+ */
 const PHENOMENON_MAP: Record<string, HazardKind> = {
-  "1": "lluvia", // BB - lluvia
-  "2": "nieve", // NE - nieve
-  "3": "tormenta", // TO - tormentas
-  "4": "viento", // VI - viento
-  "5": "costero", // CT - costero
-  "6": "altas_temperaturas", // AT
-  "7": "bajas_temperaturas", // BT
-  "8": "avenidas", // AV - avenidas / crecidas (riadas)
-  "9": "nieve", // NV - nieve en carreteras / aludes
+  PR: "lluvia", // precipitación
+  NE: "nieve",
+  NV: "nieve", // nevadas
+  TO: "tormenta",
+  VI: "viento",
+  CT: "costero",
+  AT: "altas_temperaturas",
+  BT: "bajas_temperaturas",
+  AV: "avenidas", // avenidas y crecidas: riadas
+  DE: "avenidas", // deshielo
 };
 
 function guessPhenomenon(event: string, code: string | undefined): HazardKind {
-  if (code && PHENOMENON_MAP[code]) return PHENOMENON_MAP[code];
+  // El valor llega como "PR;Lluvia"; nos quedamos con la sigla.
+  const sigla = code?.split(";")[0]?.trim().toUpperCase();
+  if (sigla && PHENOMENON_MAP[sigla]) return PHENOMENON_MAP[sigla];
   const e = event.toLowerCase();
   if (e.includes("lluvia") || e.includes("dana")) return "lluvia";
   if (e.includes("viento")) return "viento";
@@ -215,16 +243,29 @@ function guessPhenomenon(event: string, code: string | undefined): HazardKind {
   return "otro";
 }
 
-function parsePolygon(polygonText: string): [number, number][][] {
-  // CAP polygon: "lat,lon lat,lon ..." -> GeoJSON quiere [lon, lat]
-  const ring = polygonText
-    .trim()
-    .split(/\s+/)
-    .map((pair) => {
-      const [lat, lon] = pair.split(",").map(Number);
-      return [lon, lat] as [number, number];
-    });
-  return [ring];
+/** El aviso tiene que caer sobre España o sus islas. */
+function puntoPlausible(lon: number, lat: number): boolean {
+  return Number.isFinite(lon) && Number.isFinite(lat) && lon > -19 && lon < 5 && lat > 27 && lat < 44;
+}
+
+/**
+ * CAP da el polígono como "lat,lon lat,lon ..."; GeoJSON lo quiere al revés.
+ *
+ * Devuelve null si algún punto no se entiende o cae fuera de España. Un aviso
+ * medio dibujado es peor que ninguno: pintaría una zona equivocada y alguien
+ * podría creerse a salvo estando dentro del área de verdad.
+ */
+function parsePolygon(polygonText: string): [number, number][] | null {
+  const pares = polygonText.trim().split(/\s+/);
+  if (pares.length < 4) return null; // un anillo cerrado necesita al menos 4 puntos
+
+  const ring: [number, number][] = [];
+  for (const par of pares) {
+    const [lat, lon] = par.split(",").map(Number);
+    if (!puntoPlausible(lon, lat)) return null;
+    ring.push([lon, lat]);
+  }
+  return ring;
 }
 
 function extractCapFiles(tarGz: Buffer): Promise<string[]> {
@@ -265,6 +306,7 @@ interface CapInfo {
   expires?: string;
   description?: string;
   parameter?: { valueName?: string; value?: string }[] | { valueName?: string; value?: string };
+  eventCode?: { valueName?: string; value?: string }[] | { valueName?: string; value?: string };
   area?: CapArea | CapArea[];
 }
 interface CapAlert {
@@ -277,7 +319,22 @@ const xmlParser = new XMLParser({ ignoreAttributes: false, removeNSPrefix: true 
 export async function getActiveWarnings(): Promise<GeoFeatureCollection<import("./types.js").WarningProperties>> {
   const { raw } = await fetchAemet("/avisos_cap/ultimoelaborado/area/esp");
   const xmlFiles = await extractCapFiles(raw);
+  return {
+    type: "FeatureCollection",
+    features: parsearAvisosCap(xmlFiles),
+    actualizado: new Date().toISOString(),
+  };
+}
 
+/**
+ * Convierte los XML del CAP de AEMET en avisos dibujables.
+ *
+ * Va separado de la descarga a propósito: desde que existe la app no ha habido
+ * ningún aviso activo en España, así que este código nunca se había visto
+ * funcionar con un aviso de verdad. Separándolo se puede comprobar contra avisos
+ * reales guardados, sin esperar a que haya una DANA para descubrir que falla.
+ */
+export function parsearAvisosCap(xmlFiles: string[]): GeoFeature<import("./types.js").WarningProperties>[] {
   const features: GeoFeature<import("./types.js").WarningProperties>[] = [];
 
   for (const xml of xmlFiles) {
@@ -294,23 +351,43 @@ export async function getActiveWarnings(): Promise<GeoFeatureCollection<import("
     for (const info of infos) {
       const areas = Array.isArray(info.area) ? info.area : info.area ? [info.area] : [];
       const params = Array.isArray(info.parameter) ? info.parameter : info.parameter ? [info.parameter] : [];
-      const phenomenonParam = params.find((p) => p?.valueName?.includes("phenomenon"));
-      const severidad = SEVERITY_MAP[info.severity ?? ""] ?? "verde";
+      const codigos = Array.isArray(info.eventCode) ? info.eventCode : info.eventCode ? [info.eventCode] : [];
+
+      // El fenómeno va en <eventCode>, con valueName "AEMET-Meteoalerta fenomeno".
+      // Se acepta también "phenomenon" por si algún día cambian al término inglés.
+      const codigoFenomeno = [...codigos, ...params].find((p) => {
+        const n = p?.valueName?.toLowerCase() ?? "";
+        return n.includes("fenomeno") || n.includes("fenòmen") || n.includes("phenomenon");
+      })?.value;
+
+      // El nivel oficial manda; la severidad CAP es el plan B.
+      const nivel = params.find((p) => p?.valueName?.toLowerCase().includes("nivel"))?.value?.trim().toLowerCase();
+      const severidad: Severity = (nivel ? NIVEL_MAP[nivel] : undefined) ?? SEVERITY_MAP[info.severity ?? ""] ?? "verde";
       if (severidad === "verde") continue; // sin riesgo, no molesta al usuario
+
+      // Un aviso vencido en el mapa es una falsa alarma, y las falsas alarmas son
+      // las que consiguen que la gente deje de mirar la app.
+      if (info.expires) {
+        const caduca = Date.parse(info.expires);
+        if (Number.isFinite(caduca) && caduca < Date.now()) continue;
+      }
 
       for (const area of areas) {
         const polyRaw = area.polygon;
         const polys = Array.isArray(polyRaw) ? polyRaw : polyRaw ? [polyRaw] : [];
         if (polys.length === 0) continue;
 
-        const rings = polys.flatMap((p) => parsePolygon(p));
+        const rings = polys.map(parsePolygon).filter((r): r is [number, number][] => r !== null);
+        // Si alguno de los polígonos del área no se entiende, no se publica el área:
+        // dibujar solo la parte legible daría una zona de aviso más pequeña que la real.
+        if (rings.length !== polys.length) continue;
         features.push({
           type: "Feature",
           geometry: rings.length > 1 ? { type: "MultiPolygon", coordinates: rings.map((r) => [r]) } : { type: "Polygon", coordinates: rings },
           properties: {
             id: `${alert.identifier ?? "aviso"}-${area.areaDesc ?? features.length}`,
             severidad,
-            fenomeno: guessPhenomenon(info.event ?? "", phenomenonParam?.value),
+            fenomeno: guessPhenomenon(info.event ?? "", codigoFenomeno),
             descripcion: info.description ?? info.event ?? "Aviso meteorológico",
             zona: area.areaDesc ?? "España",
             efectivo: info.effective ?? "",
@@ -321,5 +398,5 @@ export async function getActiveWarnings(): Promise<GeoFeatureCollection<import("
     }
   }
 
-  return { type: "FeatureCollection", features, actualizado: new Date().toISOString() };
+  return features;
 }

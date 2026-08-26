@@ -9,7 +9,7 @@
     "start": "node dist/index.js",
     "generar-datos": "tsx src/scripts/generarDatos.ts",
     "sondar-fuentes": "tsx src/scripts/sondaFuentes.ts",
-    "test": "tsx src/pruebas/embalses.prueba.ts",
+    "test": "tsx src/pruebas/embalses.prueba.ts && tsx src/pruebas/avisos.prueba.ts",
     "typecheck": "tsc -p tsconfig.json --noEmit"
   },
   "dependencies": {
