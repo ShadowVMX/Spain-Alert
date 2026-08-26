@@ -32,6 +32,9 @@ const SATURATED_GROUND_3H_MM = 60;
 
 const UNA_HORA_MS = 60 * 60 * 1000;
 
+// Para poder comparar gravedades entre sí.
+const RANGO: Record<string, number> = { verde: 0, amarillo: 1, naranja: 2, rojo: 3 };
+
 // Una estación que deja de reportar se queda con su última lectura congelada. Si esa
 // lectura era de lluvia torrencial, seguiría disparando avisos indefinidamente. Solo
 // contamos lecturas recientes: es preferible perder una estación caída que inundar
@@ -96,8 +99,16 @@ export function calcularAlertasCercanas(lat: number, lon: number, datos: Datos):
     }
   }
 
-  const yaHayAvisoDeLluvia = alerts.some((a) => a.tipo === "avenidas" || a.tipo === "lluvia");
-  if (!yaHayAvisoDeLluvia) {
+  // Un aviso oficial de lluvia tapa nuestra propia detección SOLO si es igual o más
+  // grave. Antes bastaba con que existiera: un aviso AMARILLO de AEMET silenciaba
+  // una torrencial de 90 mm/h medida por la estación de al lado, que es justo la
+  // alerta que hay que dar. Los avisos oficiales se emiten por zonas grandes y con
+  // horas de antelación; la estación mide lo que está cayendo ahora mismo ahí.
+  const oficialLluviaMax = alerts
+    .filter((a) => a.tipo === "avenidas" || a.tipo === "lluvia")
+    .reduce((max, a) => Math.max(max, RANGO[a.severidad] ?? 0), 0);
+
+  {
     const cercanas = (datos.estaciones?.features ?? [])
       .filter((f) => esReciente(f.properties.fechaHora))
       .map((f) => {
@@ -106,42 +117,50 @@ export function calcularAlertasCercanas(lat: number, lon: number, datos: Datos):
       })
       .filter(({ d }) => d <= FLASH_FLOOD_RADIUS_KM);
 
-    const torrencial = cercanas.filter(({ f }) => (f.properties.precipitacion1h_mm ?? 0) >= TORRENTIAL_MM_H);
-    const muyFuerte = cercanas.filter(({ f }) => (f.properties.precipitacion1h_mm ?? 0) >= FLASH_FLOOD_MM_H);
-    const terrenoSaturado = cercanas.filter(({ f }) => (f.properties.lluvia3h_mm ?? 0) >= SATURATED_GROUND_3H_MM);
+    const mm1h = (x: (typeof cercanas)[number]) => x.f.properties.precipitacion1h_mm ?? 0;
+    const mm3h = (x: (typeof cercanas)[number]) => x.f.properties.lluvia3h_mm ?? 0;
+    const peorPor = (l: typeof cercanas, v: (x: (typeof cercanas)[number]) => number) => l.reduce((a, b) => (v(a) > v(b) ? a : b));
+
+    const torrencial = cercanas.filter((x) => mm1h(x) >= TORRENTIAL_MM_H);
+    const muyFuerte = cercanas.filter((x) => mm1h(x) >= FLASH_FLOOD_MM_H);
+    const terrenoSaturado = cercanas.filter((x) => mm3h(x) >= SATURATED_GROUND_3H_MM);
+
+    let propia: NearbyAlert | null = null;
 
     if (torrencial.length > 0) {
-      const peor = torrencial.reduce((a, b) => ((a.f.properties.precipitacion1h_mm ?? 0) > (b.f.properties.precipitacion1h_mm ?? 0) ? a : b)).f;
-      alerts.push({
+      const peor = peorPor(torrencial, mm1h);
+      propia = {
         tipo: "avenidas",
         severidad: "rojo",
-        titulo: `Lluvia TORRENCIAL cerca de ti (${peor.properties.precipitacion1h_mm} mm/h en ${peor.properties.nombre}): riesgo MUY ALTO de riada repentina`,
-        distancia_km: 0,
+        titulo: `Lluvia TORRENCIAL cerca de ti (${peor.f.properties.precipitacion1h_mm} mm/h en ${peor.f.properties.nombre}): riesgo MUY ALTO de riada repentina`,
+        distancia_km: Math.round(peor.d),
         instrucciones: SAFETY_INSTRUCTIONS.avenidas,
         fuente: "AEMET (estación automática, aviso no oficial)",
-      });
+      };
     } else if (muyFuerte.length > 0) {
-      const peor = muyFuerte.reduce((a, b) => ((a.f.properties.precipitacion1h_mm ?? 0) > (b.f.properties.precipitacion1h_mm ?? 0) ? a : b)).f;
-      const tendencia = peor.properties.tendenciaLluvia === "subiendo" ? " y sigue intensificándose" : "";
-      alerts.push({
+      const peor = peorPor(muyFuerte, mm1h);
+      const tendencia = peor.f.properties.tendenciaLluvia === "subiendo" ? " y sigue intensificándose" : "";
+      propia = {
         tipo: "avenidas",
         severidad: "naranja",
-        titulo: `Lluvia ${RAIN_INTENSITY_LABEL[peor.properties.intensidadLluvia].toLowerCase()} detectada cerca (${peor.properties.precipitacion1h_mm} mm/h en ${peor.properties.nombre})${tendencia}: riesgo de riada repentina`,
-        distancia_km: 0,
+        titulo: `Lluvia ${RAIN_INTENSITY_LABEL[peor.f.properties.intensidadLluvia].toLowerCase()} detectada cerca (${peor.f.properties.precipitacion1h_mm} mm/h en ${peor.f.properties.nombre})${tendencia}: riesgo de riada repentina`,
+        distancia_km: Math.round(peor.d),
         instrucciones: SAFETY_INSTRUCTIONS.avenidas,
         fuente: "AEMET (estación automática, aviso no oficial)",
-      });
+      };
     } else if (terrenoSaturado.length > 0) {
-      const peor = terrenoSaturado.reduce((a, b) => ((a.f.properties.lluvia3h_mm ?? 0) > (b.f.properties.lluvia3h_mm ?? 0) ? a : b)).f;
-      alerts.push({
+      const peor = peorPor(terrenoSaturado, mm3h);
+      propia = {
         tipo: "avenidas",
         severidad: "amarillo",
-        titulo: `Terreno saturado por lluvia acumulada cerca de ti (${peor.properties.lluvia3h_mm} mm en 3h en ${peor.properties.nombre}): ríos y ramblas pueden seguir subiendo aunque ahora no llueva tan fuerte`,
-        distancia_km: 0,
+        titulo: `Terreno saturado por lluvia acumulada cerca de ti (${peor.f.properties.lluvia3h_mm} mm en 3h en ${peor.f.properties.nombre}): ríos y ramblas pueden seguir subiendo aunque ahora no llueva tan fuerte`,
+        distancia_km: Math.round(peor.d),
         instrucciones: SAFETY_INSTRUCTIONS.avenidas,
         fuente: "AEMET (estación automática, aviso no oficial)",
-      });
+      };
     }
+
+    if (propia && (RANGO[propia.severidad] ?? 0) > oficialLluviaMax) alerts.push(propia);
   }
 
   // --- Embalses sin margen -------------------------------------------------
@@ -154,34 +173,47 @@ export function calcularAlertasCercanas(lat: number, lon: number, datos: Datos):
   // acabaría ignorando, y con ellas ignoraría también las de verdad.
   const embalsesSinMargen = (datos.embalses?.features ?? []).filter((f) => f.properties.estado === "rojo");
   if (embalsesSinMargen.length > 0) {
-    const lloviendoCerca = (datos.estaciones?.features ?? []).some(
+    const conLluvia = (datos.estaciones?.features ?? []).filter(
       (f) => esReciente(f.properties.fechaHora) && (f.properties.precipitacion1h_mm ?? 0) >= LLUVIA_RELEVANTE_MM
     );
 
-    if (lloviendoCerca) {
-      const cercanos = embalsesSinMargen
-        .map((f) => {
-          const geom = f.geometry as GeoJSON.Point;
-          return { f, d: distance(userPoint, point(geom.coordinates as [number, number]), { units: "kilometers" }) };
-        })
-        .filter(({ d }) => d <= EMBALSE_RADIO_KM);
+    const cercanos = embalsesSinMargen
+      .map((f) => {
+        const p = point((f.geometry as GeoJSON.Point).coordinates as [number, number]);
+        return { f, p, d: distance(userPoint, p, { units: "kilometers" }) };
+      })
+      .filter(({ d }) => d <= EMBALSE_RADIO_KM)
+      // ...y que esté lloviendo SOBRE ESE embalse. Antes bastaba con que lloviera en
+      // cualquier punto de España: una tormenta en Galicia daba por buena la frase
+      // "y está lloviendo en la zona" para un embalse de Valencia. El agua que
+      // desborda un embalse es la que le cae encima o aguas arriba, no la de otra
+      // punta del país.
+      .filter(({ p }) =>
+        conLluvia.some(
+          (e) => distance(p, point((e.geometry as GeoJSON.Point).coordinates as [number, number]), { units: "kilometers" }) <= EMBALSE_RADIO_KM
+        )
+      );
 
-      if (cercanos.length > 0) {
-        const masCercano = cercanos.reduce((a, b) => (a.d < b.d ? a : b));
-        const pct = masCercano.f.properties.porcentaje;
-        alerts.push({
-          tipo: "avenidas",
-          severidad: "naranja",
-          titulo:
-            `El embalse de ${masCercano.f.properties.nombre} está al ${pct !== null ? `${pct}%` : "límite"} ` +
-            `y está lloviendo en la zona: sin margen para absorber la crecida, el agua va aguas abajo`,
-          distancia_km: Math.round(masCercano.d),
-          instrucciones: SAFETY_INSTRUCTIONS.avenidas,
-          fuente: "MITECO (nivel de embalses)",
-        });
-      }
+    if (cercanos.length > 0) {
+      const masCercano = cercanos.reduce((a, b) => (a.d < b.d ? a : b));
+      const pct = masCercano.f.properties.porcentaje;
+      alerts.push({
+        tipo: "avenidas",
+        severidad: "naranja",
+        titulo:
+          `El embalse de ${masCercano.f.properties.nombre} está al ${pct !== null ? `${pct}%` : "límite"} ` +
+          `y está lloviendo en la zona: sin margen para absorber la crecida, el agua va aguas abajo`,
+        distancia_km: Math.round(masCercano.d),
+        instrucciones: SAFETY_INSTRUCTIONS.avenidas,
+        fuente: `${masCercano.f.properties.fuente} (nivel de embalses)`,
+      });
     }
   }
+
+  // Lo más grave, primero. Quien abre la app en una emergencia mira lo de arriba:
+  // si el primer sitio lo ocupa un amarillo mientras hay un rojo debajo, la app
+  // está enterrando justo lo que tenía que gritar. A igual gravedad, lo más cerca.
+  alerts.sort((a, b) => (RANGO[b.severidad] ?? 0) - (RANGO[a.severidad] ?? 0) || a.distancia_km - b.distancia_km);
 
   return alerts;
 }
