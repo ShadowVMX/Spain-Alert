@@ -34,6 +34,21 @@ interface Resultado {
   authError?: boolean;
 }
 
+/**
+ * En GitHub Actions el log de un paso queda enterrado entre cientos de líneas de
+ * las acciones oficiales. El resumen del job aparece arriba del todo y se lee de
+ * un vistazo, así que el diagnóstico de las fuentes va también ahí.
+ */
+async function alResumen(lineas: string[]): Promise<void> {
+  const destino = process.env.GITHUB_STEP_SUMMARY;
+  if (!destino) return;
+  try {
+    await fs.appendFile(destino, lineas.join("\n") + "\n", "utf-8");
+  } catch {
+    // El resumen es una comodidad, no una función crítica: si falla, seguimos.
+  }
+}
+
 async function escribir(nombre: string, datos: unknown): Promise<void> {
   await fs.writeFile(path.join(outDir, nombre), JSON.stringify(datos), "utf-8");
 }
@@ -97,15 +112,19 @@ async function generarSaih(): Promise<Resultado> {
  * el diagnóstico completo se vuelca al log para poder ajustar la detección de
  * campos sin tener que adivinar desde fuera.
  */
+const diagnosticoEmbalses: string[] = [];
+
 async function generarEmbalses(): Promise<Resultado> {
   try {
     const { coleccion, diagnostico } = await getEmbalses();
+    diagnosticoEmbalses.push(...diagnostico);
     for (const linea of diagnostico) console.log(`   ↳ ${linea}`);
     await escribir("embalses.json", coleccion);
     const conNivel = coleccion.features.filter((f) => f.properties.porcentaje !== null).length;
     return { archivo: "embalses.json", ok: true, detalle: `${coleccion.features.length} embalses (${conNivel} con nivel)` };
   } catch (err) {
     await escribir("embalses.json", { type: "FeatureCollection", features: [], actualizado: new Date().toISOString(), error: (err as Error).message });
+    diagnosticoEmbalses.push((err as Error).message);
     console.log(`   ↳ embalses: ${(err as Error).message}`);
     return { archivo: "embalses.json", ok: false, detalle: (err as Error).message };
   }
@@ -166,9 +185,18 @@ async function main() {
     },
   });
 
-  for (const r of [avisos, estaciones, terremotos, saih, embalses]) {
-    console.log(`${r.ok ? "✅" : "⚠️ "} ${r.archivo}: ${r.detalle}`);
-  }
+  const resumen = [avisos, estaciones, terremotos, saih, embalses].map(
+    (r) => `${r.ok ? "✅" : "⚠️"} **${r.archivo}** — ${r.detalle}`
+  );
+  for (const linea of resumen) console.log(linea.replace(/\*\*/g, ""));
+
+  await alResumen([
+    "## Datos descargados",
+    "",
+    ...resumen,
+    "",
+    ...(diagnosticoEmbalses.length > 0 ? ["### Diagnóstico de embalses", "", "```", ...diagnosticoEmbalses, "```"] : []),
+  ]);
 
   if (avisos.authError || estaciones.authError) {
     abortar(
