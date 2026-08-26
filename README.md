@@ -180,9 +180,28 @@ sabemos hasta ahora:
 | Cuenca | Estado |
 |---|---|
 | Catalunya (ACA) | ✅ Integrada, en tiempo real |
-| Hidrosur (Andalucía) | 🔜 Localizadas sus capas en GeoJSON: embalses, aforos y pluviómetros. Falta el endpoint de lecturas |
-| Júcar | ⏳ `saih.chj.es` responde, pero no hemos dado con la ruta que sirve los datos |
-| Ebro | ⏳ `saihebro.com` da tiempo de espera agotado desde GitHub Actions |
+| **Júcar** | 🔜 **Localizado.** `saih.chj.es/embalses` y `/aforos` sirven sus datos, y la portada trae la red de pluviómetros embebida en el HTML con lluvia a 1, 4, 12 y 24 h. Falta escribir la integración |
+| Hidrosur (Andalucía) | 🔜 Capas en GeoJSON localizadas y catálogo de sensores accesible. El endpoint de lecturas responde pero aún no acierta con el formato de fecha |
+| Ebro | ❌ **Inalcanzable desde GitHub Actions.** Tiempo de espera agotado en http y en https, con y sin `www`. No es el certificado: es el camino de red. Necesitaría otra salida |
+
+<details>
+<summary>Lo que sabemos del SAIH del Júcar (por si alguien quiere adelantarse)</summary>
+
+```
+https://saih.chj.es/            portada: red de pluviómetros embebida como
+                                `let estaciones = [{"idEstacionRemota": ...}]`
+https://saih.chj.es/embalses    → embalse-datos-vol, embalse-datos-cot
+https://saih.chj.es/aforos      → aforo-datos, aforo-datos-ultimo,
+                                  aforo-datos-umbrales
+```
+
+**Cuidado con las coordenadas.** Los campos se llaman `fldNCoordGPSLat` y
+`fldNCoordGPSLon`, pero no son grados ni están en ese orden: el que dice «Lat»
+lleva la X y el que dice «Lon» lleva la Y, ambas en UTM del huso 30 Norte. Se
+comprueba con l'Alfàs del Pi, que cae en (755000, 4272000). Fiarse del nombre
+del campo pondría Alicante en el océano Índico.
+
+</details>
 
 Si trabajas en una confederación hidrográfica o conoces el portal correcto,
 [cuéntanoslo](../../issues/new?template=03-fuente-datos.yml) — es lo que más falta
