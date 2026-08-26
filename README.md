@@ -188,12 +188,24 @@ sabemos hasta ahora:
 <summary>Lo que sabemos del SAIH del Júcar (por si alguien quiere adelantarse)</summary>
 
 ```
-https://saih.chj.es/            portada: red de pluviómetros embebida como
-                                `let estaciones = [{"idEstacionRemota": ...}]`
-https://saih.chj.es/embalses    → embalse-datos-vol, embalse-datos-cot
-https://saih.chj.es/aforos      → aforo-datos, aforo-datos-ultimo,
-                                  aforo-datos-umbrales
+https://saih.chj.es/            portada: red de pluviómetros embebida en el HTML
+                                como `let estaciones = [{"idEstacionRemota": ...}]`
+https://saih.chj.es/embalses    HTML servido desde el servidor, valores dentro
+https://saih.chj.es/aforos      HTML servido desde el servidor, valores dentro
 ```
+
+**No hay API JSON.** `aforo-datos`, `aforo-datos-ultimo` y `aforo-datos-umbrales`
+parecen rutas pero son **nombres de clase CSS**: el caudal viene escrito en el
+propio HTML.
+
+```html
+<div class="aforo-datos-ultimo">Último valor
+  <div class="dato-valor-ppal">12,18 m<sup>3</sup>/s</div><span>09:20</span></div>
+```
+
+Así que la integración de estas dos capas es análisis de HTML, con lo que eso
+implica: se rompe el día que la confederación cambie su plantilla. La portada es
+distinta y más sólida, porque ahí sí hay un JSON completo embebido.
 
 **Cuidado con las coordenadas.** Los campos se llaman `fldNCoordGPSLat` y
 `fldNCoordGPSLon`, pero no son grados ni están en ese orden: el que dice «Lat»
