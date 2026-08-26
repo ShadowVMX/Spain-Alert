@@ -114,6 +114,12 @@ const msToKmh = (v: number | undefined) => (v === undefined ? null : Math.round(
 // mañana siguiera disparando aviso de riada por la noche. Falsas alarmas
 // garantizadas, y con ellas el que la gente deje de hacer caso a los avisos.
 const TRES_HORAS_MS = 3 * 60 * 60 * 1000;
+const UNA_HORA_MS = 60 * 60 * 1000;
+
+// La tendencia solo tiene sentido entre lecturas seguidas. Si una estación estuvo
+// caída medio día, comparar su lectura de ahora con la de hace 12 h no dice si la
+// lluvia está arreciando: dice que ha pasado el tiempo.
+const HUECO_MAX_TENDENCIA_MS = 90 * 60 * 1000;
 
 interface HistorialEstacion {
   actual: AemetObservacion;
@@ -122,7 +128,7 @@ interface HistorialEstacion {
 }
 
 /** Agrupa las observaciones por estación y resume el estado actual de cada una. */
-function resumirPorEstacion(observaciones: AemetObservacion[]): HistorialEstacion[] {
+export function resumirPorEstacion(observaciones: AemetObservacion[]): HistorialEstacion[] {
   const porEstacion = new Map<string, AemetObservacion[]>();
   for (const o of observaciones) {
     if (typeof o.lat !== "number" || typeof o.lon !== "number" || !o.fint) continue;
@@ -137,12 +143,36 @@ function resumirPorEstacion(observaciones: AemetObservacion[]): HistorialEstacio
     const actual = lecturas[lecturas.length - 1];
     const instanteActual = new Date(actual.fint).getTime();
 
-    // El acumulado de 3 h sale del mismo payload, sin pedir nada más a AEMET.
-    const ultimas3h = lecturas.filter((l) => instanteActual - new Date(l.fint).getTime() <= TRES_HORAS_MS);
-    const lluvia3h = ultimas3h.length > 0 ? Math.round(ultimas3h.reduce((acc, l) => acc + (l.prec ?? 0), 0) * 10) / 10 : null;
+    // El acumulado de 3 h sale del mismo payload, sin pedir nada más a AEMET, pero
+    // hay que sumarlo con cuidado: en cada lectura `prec` son los milímetros de los
+    // 60 minutos ANTERIORES a esa hora, no los de ese instante.
+    //
+    // Eso tiene dos trampas, y antes se caía en las dos:
+    //
+    //  - La ventana incluía la lectura de hace exactamente 3 h, que cubre la hora
+    //    que va de -4 h a -3 h. Se estaban sumando 4 horas y llamándolas 3.
+    //
+    //  - Se sumaban todas las lecturas. Una estación que reporta cada 20 minutos
+    //    manda tres lecturas por hora, y cada una cubre los mismos 60 minutos: se
+    //    solapan. Sumarlas multiplicaba la lluvia por tres. Con 30 mm reales
+    //    salían 120, de sobra para disparar solo el aviso de terreno saturado.
+    //
+    // Se agrupa por hora cubierta y se toma el máximo de cada una: para lecturas
+    // horarias es la suma de siempre, y para las que se solapan deja de inventar
+    // agua que no ha caído.
+    const porHora = new Map<number, number>();
+    for (const l of lecturas) {
+      const antiguedad = instanteActual - new Date(l.fint).getTime();
+      if (antiguedad < 0 || antiguedad >= TRES_HORAS_MS) continue;
+      const mm = typeof l.prec === "number" && Number.isFinite(l.prec) && l.prec > 0 ? l.prec : 0;
+      const hora = Math.floor(antiguedad / UNA_HORA_MS);
+      porHora.set(hora, Math.max(porHora.get(hora) ?? 0, mm));
+    }
+    const lluvia3h = porHora.size > 0 ? Math.round([...porHora.values()].reduce((a, b) => a + b, 0) * 10) / 10 : null;
 
     const anterior = lecturas.length >= 2 ? lecturas[lecturas.length - 2] : null;
-    const tendencia = anterior ? classifyTrend(actual.prec ?? 0, anterior.prec ?? 0) : null;
+    const huecoOk = anterior ? instanteActual - new Date(anterior.fint).getTime() <= HUECO_MAX_TENDENCIA_MS : false;
+    const tendencia = anterior && huecoOk ? classifyTrend(actual.prec ?? 0, anterior.prec ?? 0) : null;
 
     resumen.push({ actual, lluvia3h, tendencia });
   }
