@@ -260,7 +260,8 @@ minutos). La del proyecto es privada y no se comparte.
 
 ## Roadmap
 
-- [ ] **Embalses del Júcar y del Ebro** (lo más urgente: Catalunya ya va en tiempo real)
+- [ ] **Dejar lluvia y temporal impecables** ← el foco ahora mismo
+- [ ] ~~Embalses del Júcar y del Ebro~~ *(en pausa: Catalunya funciona, el resto espera)*
 - [ ] Nivel y caudal de los ríos del SAIH, resolviendo el certificado TLS
 - [ ] Meter el caudal de los ríos en el motor de alertas: es la señal más fiable de
       riada real, mejor que solo mirar la lluvia

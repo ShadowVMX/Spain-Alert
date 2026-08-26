@@ -1,0 +1,44 @@
+name: Validar
+
+# Hasta ahora lo único que comprobaba el proyecto era `deploy.yml`, que se lanza
+# en push a main: es decir, DESPUÉS de mergear. Un PR que rompiera la web se
+# mergeaba y el fallo aparecía cuando ya estaba dentro.
+#
+# Esto lo pone del derecho: se ejecuta en cada PR, y si falla, GitHub marca el PR
+# en rojo y no se mergea hasta arreglarlo.
+
+on:
+  pull_request:
+    branches: [main]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  validar:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+
+      - name: Instalar dependencias
+        run: npm run install:all
+
+      - name: Comprobar tipos
+        run: npm run typecheck
+
+      - name: Comprobaciones
+        run: npm --prefix server run test
+
+      # Construir la web es lo que de verdad protege al usuario: si esto falla, lo
+      # que se publicaría sería una página rota. No hace falta clave de AEMET
+      # porque no se descargan datos, solo se compila.
+      - name: Construir la web
+        env:
+          VITE_DATA_MODE: estatico
+          VITE_BASE: /${{ github.event.repository.name }}/
+        run: npm --prefix web run build
