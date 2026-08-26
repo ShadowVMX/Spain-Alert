@@ -22,11 +22,17 @@ vale tanto como escribir código.
 
 ### Lo más valioso ahora mismo
 
-**Fuentes de datos.** Es el cuello de botella real. Los datos de emergencias en
-España están repartidos entre AEMET, nueve confederaciones hidrográficas, el IGN,
-las comunidades autónomas y los ayuntamientos, cada uno con su formato y sin un
-catálogo común. Si trabajas en alguno de esos organismos, o simplemente conoces un
-portal que publique datos en tiempo real, [cuéntanoslo](../../issues/new?template=03-fuente-datos.yml).
+**Dónde publica MITECO el estado de los embalses.** Es lo que más falta hace ahora
+mismo: la capa del mapa, los colores y la regla de aviso ya están hechos y probados,
+pero no encontramos la fuente. El API de objetos geográficos de MITECO responde, pero
+sus colecciones son de agricultura, pesca y alimentación; el agua no está ahí.
+
+**Fuentes de datos en general.** Es el cuello de botella real. Los datos de
+emergencias en España están repartidos entre AEMET, nueve confederaciones
+hidrográficas, el IGN, las comunidades autónomas y los ayuntamientos, cada uno con su
+formato y sin un catálogo común. Si trabajas en alguno de esos organismos, o
+simplemente conoces un portal que publique datos en tiempo real,
+[cuéntanoslo](../../issues/new?template=03-fuente-datos.yml).
 
 **Conocimiento local.** Si sabes qué barranco de tu pueblo se desborda siempre, o
 qué vado se corta con dos gotas, eso es información que ningún sensor da.
@@ -37,14 +43,21 @@ qué vado se corta con dos gotas, eso es información que ningún sensor da.
 
 ### Preparar el entorno
 
+Esto es solo para desarrollar. **El servicio en marcha lo mantenemos nosotros**
+—infraestructura, clave de AEMET y despliegue— así que para usar la app basta con
+[abrirla en el navegador](https://shadowvmx.github.io/Spain-Alert/).
+
+Para tocar código necesitas tu propia clave de AEMET, que es
+[gratuita](https://opendata.aemet.es/centrodedescargas/altaUsuario) y tarda 5
+minutos. La del proyecto es privada y no se comparte.
+
 ```bash
 git clone https://github.com/ShadowVMX/Spain-Alert.git
 cd Spain-Alert
 npm run install:all
 
 cp server/.env.example server/.env
-# pega dentro tu clave gratuita de AEMET:
-# https://opendata.aemet.es/centrodedescargas/altaUsuario
+# pega dentro TU clave de AEMET
 
 npm run dev:server    # terminal 1
 npm run dev:web       # terminal 2 -> http://localhost:5173
