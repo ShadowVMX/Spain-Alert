@@ -38,48 +38,72 @@ interface Candidato {
    *  campos de un formulario, o las rutas de los bundles de JavaScript, sin tener
    *  que volcar el documento entero. */
   extraer?: string;
+  /** Método y cuerpo, para los endpoints que solo responden a POST. */
+  metodo?: string;
+  cuerpo?: Record<string, string>;
 }
 
 const CANDIDATOS: Candidato[] = [
-  // === RONDA 4 =============================================================
-  // La ronda 3 dejó dos puertas entreabiertas y cerró una del todo.
+  // === RONDA 5 =============================================================
+  // La ronda 4 encontró el oro: el visor del Júcar trae sus datos EMBEBIDOS en
+  // el propio HTML, con coordenadas y lluvia acumulada a 1, 4, 12 y 24 horas,
+  // fechada cinco minutos antes del sondeo. Y es la cuenca de la DANA.
+  //
+  // Ojo con los nombres de los campos: `fldNCoordGPSLat` vale 756021 y
+  // `fldNCoordGPSLon` vale 4271631. Eso no son grados: es UTM del huso 30 Norte,
+  // y encima están al revés — el que dice "Lat" lleva la X. Se comprueba con
+  // l'Alfàs del Pi, que cae en (755000, 4272000). Fiarse del nombre del campo
+  // habría puesto Alicante en el océano Índico.
 
-  // --- Hidrosur: el endpoint de lecturas EXISTE ----------------------------
-  // `/datos/a/la/carta/csv` respondió 200 con "Fecha inicial y fecha final son
-  // requeridos". Está vivo y solo le faltan argumentos. Los nombres de esos
-  // argumentos están en el formulario del visor.
-  {
-    grupo: "Hidrosur",
-    id: "formulario",
-    buscamos: "los nombres de los campos del formulario, que son los argumentos del CSV",
-    url: "https://www.redhidrosurmedioambiente.es/saih/datos/a/la/carta",
-    extraer: '(?:name|id)="[A-Za-z][\\w.-]{1,40}"',
-  },
-  {
-    grupo: "Hidrosur",
-    id: "formulario-llamada",
-    buscamos: "cómo arma el visor la URL del CSV",
-    url: "https://www.redhidrosurmedioambiente.es/saih/datos/a/la/carta",
-    extraer: "(?:csv|fecha|Fecha)[A-Za-z]*\\s*[:=]",
-  },
-
-  // --- Júcar: usa OpenLayers, así que las capas se piden por JavaScript -----
-  // El volcado del `<head>` reveló OpenLayers 10.4 y proj4. Las llamadas están en
-  // sus bundles, no en el HTML. Primero hay que saber cuáles son.
+  // --- Júcar: dónde se declara ese JSON, y qué otras páginas hay -----------
   {
     grupo: "SAIH Júcar",
-    id: "bundles",
-    buscamos: "las rutas de los JavaScript propios del visor",
+    id: "declaracion-datos",
+    buscamos: "el nombre de la variable que lleva el JSON embebido, para poder extraerlo",
     url: "https://saih.chj.es/",
-    extraer: 'src="/(?!vendor)[\\w./-]+\\.js"',
+    extraer: '(?:var|let|const)\\s+[\\w$]+\\s*=\\s*(?:JSON\\.parse\\()?[\'"\\[]\\[?\\{?"?idEstacion',
   },
   {
     grupo: "SAIH Júcar",
-    id: "cuerpo",
-    buscamos: "el resto del documento, pasado el <head> de hojas de estilo",
+    id: "contexto-json",
+    buscamos: "el HTML justo antes del JSON, que enseña cómo va envuelto",
     url: "https://saih.chj.es/",
-    volcado: 2000,
-    volcadoDesde: 90000,
+    volcado: 1200,
+    volcadoDesde: 86500,
+  },
+  {
+    grupo: "SAIH Júcar",
+    id: "menu-lateral",
+    buscamos: "las otras páginas del visor: embalses y aforos, no solo lluvia",
+    url: "https://saih.chj.es/js/left-sidebar.js",
+    extraer: '["\'`]/[\\w/-]{2,40}["\'`]',
+  },
+
+  // --- Hidrosur: el CSV pide fechas, se las damos -------------------------
+  // El formulario declara `datepickerini` y `datepickerfin`, y el script maneja
+  // `fechaIniPHP` y `fechaFinPHP`. Probamos ambos nombres.
+  {
+    grupo: "Hidrosur",
+    id: "csv-datepicker",
+    buscamos: "si acepta los nombres del formulario",
+    url: "https://www.redhidrosurmedioambiente.es/saih/datos/a/la/carta/csv?datepickerini=25/08/2026&datepickerfin=26/08/2026&tipoestacion=E",
+    volcado: 700,
+  },
+  {
+    grupo: "Hidrosur",
+    id: "csv-fechaini",
+    buscamos: "si acepta los nombres que usa el script",
+    url: "https://www.redhidrosurmedioambiente.es/saih/datos/a/la/carta/csv?fechaIni=25/08/2026&fechaFin=26/08/2026&tipoestacion=E",
+    volcado: 700,
+  },
+  {
+    grupo: "Hidrosur",
+    id: "parametros-post",
+    buscamos: "el catálogo de agrupaciones, provincias y tipos de estación",
+    url: "https://www.redhidrosurmedioambiente.es/saih/datos/a/la/carta/parametros",
+    metodo: "POST",
+    cuerpo: { agrupacion: "1" },
+    volcado: 1200,
   },
 ];
 
@@ -210,7 +234,14 @@ async function sondear(c: Candidato): Promise<string[]> {
   const t0 = Date.now();
   try {
     res = await fetch(c.url, {
-      headers: { "User-Agent": "Alerta-Espana/sonda (proyecto abierto de avisos de riada)", Accept: "*/*", ...c.headers },
+      method: c.metodo ?? "GET",
+      headers: {
+        "User-Agent": "Alerta-Espana/sonda (proyecto abierto de avisos de riada)",
+        Accept: "*/*",
+        ...(c.cuerpo ? { "Content-Type": "application/x-www-form-urlencoded" } : {}),
+        ...c.headers,
+      },
+      body: c.cuerpo ? new URLSearchParams(c.cuerpo).toString() : undefined,
       signal: AbortSignal.timeout(TIMEOUT_MS),
     });
   } catch (err) {
