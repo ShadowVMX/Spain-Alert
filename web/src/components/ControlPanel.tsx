@@ -13,9 +13,13 @@ interface Props {
   capas: CapasVisibles;
   saihLayers: SaihCapa[];
   opacidadRadar: number;
+  soloConLluvia: boolean;
+  nEstaciones: number;
+  nConLluvia: number;
   onCapa: (clave: keyof CapasVisibles) => void;
   onSaih: (capa: SaihCapa) => void;
   onOpacidadRadar: (v: number) => void;
+  onSoloConLluvia: (v: boolean) => void;
 }
 
 const ESCALA: { mm: number; etiqueta: string }[] = [
@@ -26,7 +30,18 @@ const ESCALA: { mm: number; etiqueta: string }[] = [
   { mm: 80, etiqueta: RAIN_INTENSITY_LABEL.torrencial },
 ];
 
-export function ControlPanel({ capas, saihLayers, opacidadRadar, onCapa, onSaih, onOpacidadRadar }: Props) {
+export function ControlPanel({
+  capas,
+  saihLayers,
+  opacidadRadar,
+  soloConLluvia,
+  nEstaciones,
+  nConLluvia,
+  onCapa,
+  onSaih,
+  onOpacidadRadar,
+  onSoloConLluvia,
+}: Props) {
   const [abierto, setAbierto] = useState(false);
 
   return (
@@ -61,6 +76,18 @@ export function ControlPanel({ capas, saihLayers, opacidadRadar, onCapa, onSaih,
             <Interruptor activo={capas.estaciones} onClick={() => onCapa("estaciones")} color="#0ea5e9">
               Estaciones de medición
             </Interruptor>
+            {capas.estaciones && (
+              <>
+                <Interruptor activo={soloConLluvia} onClick={() => onSoloConLluvia(!soloConLluvia)} color="#38bdf8">
+                  Solo donde llueve
+                </Interruptor>
+                <p className="panel-nota">
+                  {soloConLluvia
+                    ? `Mostrando ${nConLluvia} de ${nEstaciones} estaciones`
+                    : `Mostrando las ${nEstaciones} estaciones de AEMET`}
+                </p>
+              </>
+            )}
           </section>
 
           <section className="panel-seccion">

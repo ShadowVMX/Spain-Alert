@@ -25,10 +25,19 @@ interface Props {
   opacidadRadar: number;
   capas: CapasVisibles;
   saihLayers: SaihCapa[];
+  soloConLluvia: boolean;
   userPos: { lat: number; lon: number } | null;
 }
 
-export function MapView({ datos, radar, indiceRadar, opacidadRadar, capas, saihLayers, userPos }: Props) {
+// Solo late lo que de verdad es peligroso. Animar cada estación con algo de lluvia
+// llenaba el mapa de parpadeos y gastaba GPU sin aportar información.
+const LLUVIA_PELIGROSA_MM = 30;
+
+export function MapView({ datos, radar, indiceRadar, opacidadRadar, capas, saihLayers, soloConLluvia, userPos }: Props) {
+  const estaciones = (datos.estaciones?.features ?? []).filter(
+    (f) => !soloConLluvia || (f.properties.precipitacion1h_mm ?? 0) > 0
+  );
+
   return (
     <MapContainer
       center={CENTRO_ESPANA}
@@ -79,10 +88,10 @@ export function MapView({ datos, radar, indiceRadar, opacidadRadar, capas, saihL
         ))}
 
       {capas.estaciones &&
-        datos.estaciones?.features.map((f) => {
+        estaciones.map((f) => {
           const lluvia = f.properties.precipitacion1h_mm ?? 0;
           const geom = f.geometry as GeoJSON.Point;
-          const intensa = lluvia >= 15;
+          const intensa = lluvia >= LLUVIA_PELIGROSA_MM;
           return (
             <CircleMarker
               key={f.properties.id}

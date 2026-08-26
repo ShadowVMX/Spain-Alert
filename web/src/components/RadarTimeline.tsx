@@ -1,26 +1,34 @@
 import { useEffect } from "react";
 import type { RadarData } from "../hooks/useRadarFrames";
 
-const VELOCIDAD_MS = 450; // ritmo de reproducción entre frames
-const PAUSA_FINAL_MS = 1200; // pequeña pausa al llegar al final, antes de rebobinar
+// Ritmo base entre frames. A 400 ms la animación se arrastra; los radares
+// meteorológicos suelen ir bastante más rápidos, así que por defecto va a 2x.
+const RITMO_BASE_MS = 400;
+const PAUSA_FINAL_MS = 900; // respiro al llegar al final, antes de rebobinar
+
+export const VELOCIDADES = [1, 2, 4] as const;
+export type Velocidad = (typeof VELOCIDADES)[number];
 
 interface Props {
   radar: RadarData;
   indice: number;
   reproduciendo: boolean;
+  velocidad: Velocidad;
   onIndice: (i: number) => void;
   onReproduciendo: (v: boolean) => void;
+  onVelocidad: (v: Velocidad) => void;
 }
 
-export function RadarTimeline({ radar, indice, reproduciendo, onIndice, onReproduciendo }: Props) {
+export function RadarTimeline({ radar, indice, reproduciendo, velocidad, onIndice, onReproduciendo, onVelocidad }: Props) {
   const total = radar.frames.length;
 
   useEffect(() => {
     if (!reproduciendo || total === 0) return;
     const esUltimo = indice >= total - 1;
-    const id = setTimeout(() => onIndice(esUltimo ? 0 : indice + 1), esUltimo ? PAUSA_FINAL_MS : VELOCIDAD_MS);
+    const espera = esUltimo ? PAUSA_FINAL_MS : RITMO_BASE_MS / velocidad;
+    const id = setTimeout(() => onIndice(esUltimo ? 0 : indice + 1), espera);
     return () => clearTimeout(id);
-  }, [reproduciendo, indice, total, onIndice]);
+  }, [reproduciendo, indice, total, velocidad, onIndice]);
 
   if (radar.cargando) {
     return (
@@ -50,6 +58,15 @@ export function RadarTimeline({ radar, indice, reproduciendo, onIndice, onReprod
         aria-label={reproduciendo ? "Pausar animación" : "Reproducir animación"}
       >
         {reproduciendo ? "❚❚" : "▶"}
+      </button>
+
+      <button
+        className="radar-velocidad"
+        onClick={() => onVelocidad(VELOCIDADES[(VELOCIDADES.indexOf(velocidad) + 1) % VELOCIDADES.length])}
+        title="Velocidad de la animación"
+        aria-label={`Velocidad ${velocidad}x, pulsa para cambiar`}
+      >
+        {velocidad}x
       </button>
 
       <div className="radar-pista">

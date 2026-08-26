@@ -4,6 +4,7 @@ import { TopBar } from "./components/TopBar";
 import { ControlPanel } from "./components/ControlPanel";
 import type { CapasVisibles } from "./components/ControlPanel";
 import { RadarTimeline } from "./components/RadarTimeline";
+import type { Velocidad } from "./components/RadarTimeline";
 import { AlertBanner } from "./components/AlertBanner";
 import { StaleBanner } from "./components/StaleBanner";
 import { useGeolocation } from "./hooks/useGeolocation";
@@ -24,6 +25,10 @@ export default function App() {
   const [indiceRadar, setIndiceRadar] = useState(0);
   const [reproduciendo, setReproduciendo] = useState(true);
   const [opacidadRadar, setOpacidadRadar] = useState(0.75);
+  const [velocidadRadar, setVelocidadRadar] = useState<Velocidad>(2);
+  // Por defecto solo se ven las estaciones donde llueve: las ~800 de AEMET a la vez
+  // llenan España de puntos grises que no dicen nada.
+  const [soloConLluvia, setSoloConLluvia] = useState(true);
 
   const datos = useHazardData(refreshKey);
   const radar = useRadarFrames(refreshKey);
@@ -57,6 +62,7 @@ export default function App() {
         opacidadRadar={opacidadRadar}
         capas={capas}
         saihLayers={saihLayers}
+        soloConLluvia={soloConLluvia}
         userPos={geo.lat && geo.lon ? { lat: geo.lat, lon: geo.lon } : null}
       />
 
@@ -79,9 +85,13 @@ export default function App() {
           capas={capas}
           saihLayers={saihLayers}
           opacidadRadar={opacidadRadar}
+          soloConLluvia={soloConLluvia}
+          nEstaciones={datos.estaciones?.features.length ?? 0}
+          nConLluvia={(datos.estaciones?.features ?? []).filter((f) => (f.properties.precipitacion1h_mm ?? 0) > 0).length}
           onCapa={(clave) => setCapas((c) => ({ ...c, [clave]: !c[clave] }))}
           onSaih={(capa) => setSaihLayers((prev) => (prev.includes(capa) ? prev.filter((c) => c !== capa) : [...prev, capa]))}
           onOpacidadRadar={setOpacidadRadar}
+          onSoloConLluvia={setSoloConLluvia}
         />
 
         {capas.radar && (
@@ -89,8 +99,10 @@ export default function App() {
             radar={radar}
             indice={indiceRadar}
             reproduciendo={reproduciendo}
+            velocidad={velocidadRadar}
             onIndice={setIndiceRadar}
             onReproduciendo={setReproduciendo}
+            onVelocidad={setVelocidadRadar}
           />
         )}
 
