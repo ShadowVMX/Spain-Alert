@@ -64,7 +64,7 @@ tu propio móvil. No hay cuentas, ni registro, ni rastreo, ni publicidad.
 | ⚠️ **Avisos oficiales de AEMET** | Zonas de aviso por gravedad: amarillo, naranja, rojo |
 | 📡 **858 estaciones** | Toda la red de AEMET, coloreada por intensidad de lluvia |
 | 🌍 **Terremotos** | Sismos recientes de la red nacional |
-| 💧 **Embalses** | Nivel de llenado por colores *(capa lista, pendiente de fuente de datos)* |
+| 💧 **Embalses** | Nivel de llenado por colores, en tiempo real *(Catalunya; resto de cuencas en marcha)* |
 
 ### Detección propia de riesgo de riada
 
@@ -88,6 +88,7 @@ en ese momento ya no llueva fuerte.
 |---|---|---|
 | Radar de lluvia | [RainViewer](https://www.rainviewer.com/) | Sí, en la app publicada |
 | Estaciones | [AEMET OpenData](https://opendata.aemet.es) | Sí — **858 estaciones** por ejecución |
+| Embalses de Catalunya | [ACA](https://analisi.transparenciacatalunya.cat/d/vjx7-6kcp) vía datos abiertos de la Generalitat | Sí — nivel en tiempo real, con posición propia |
 | Terremotos | [EMSC](https://www.seismicportal.eu) (incluye red del IGN) | Sí — **200 sismos** por ejecución |
 | Mapa base | [CARTO](https://carto.com/attributions) + [OpenStreetMap](https://www.openstreetmap.org/copyright) | Sí |
 | Alertas por proximidad | Cálculo local | Sí, en navegador con ubicación simulada |
@@ -97,7 +98,7 @@ en ese momento ya no llueva fuerte.
 | Qué | Estado real |
 |---|---|
 | **Avisos AEMET (CAP)** | El código está integrado y responde, pero desde que la app existe **no ha habido ningún aviso activo en España**, así que el parseo del formato oficial todavía no se ha visto funcionar con un aviso de verdad. |
-| **Embalses** | La capa, los colores y la regla de aviso están hechos y probados. Falta la fuente: el API de objetos geográficos de MITECO responde, pero sus 30 colecciones son de agricultura, pesca y alimentación (quesos, vinos, batimetría). **El agua no está ahí.** Hay que localizar el servicio correcto. |
+| **Embalses fuera de Catalunya** | Catalunya ya va en tiempo real. Faltan las cuencas donde caen las DANAs. **MITECO queda descartado**: ni su API de objetos geográficos ni su directorio ArcGIS (`ElevationsService`, `PrintService`, `SharedService`) publican el agua, y su WMS tiene la cadena TLS incompleta. La vía buena es cuenca a cuenca. |
 | **Ríos y caudales (SAIH)** | `wms.mapama.gob.es` responde con `UNABLE_TO_VERIFY_LEAF_SIGNATURE`: le falta el certificado intermedio en la cadena TLS. Los navegadores lo resuelven solos buscándolo; Node no. |
 | **Notificaciones con la app cerrada** | Necesita un servidor con Push API y claves VAPID. Hoy el aviso solo salta con la pestaña abierta. |
 | **Frecuencia real de actualización** | El cron pide cada 10 min, pero GitHub retrasa las tareas programadas: en la práctica se ejecuta cada 30-60 min. Para lluvia se aguanta; si esto se usa en serio, hay que mover la descarga a un servidor propio. |
@@ -125,11 +126,12 @@ ninguna parte.
 ```
 server/                    Node + Express (TypeScript)
   src/lib/aemet.ts           avisos CAP + estaciones, con detección de clave caducada
-  src/lib/embalses.ts        descubrimiento de embalses (a la espera de fuente)
+  src/lib/embalses.ts        embalses en tiempo real, registro de fuentes por cuenca
   src/lib/saih.ts            capas WMS de ríos y embalses
   src/lib/earthquakes.ts     sismos vía EMSC
   src/lib/rain.ts            escala oficial de intensidad de AEMET
-  src/scripts/               generador de datos estáticos
+  src/scripts/               generador de datos estáticos + sonda de fuentes
+  src/pruebas/               comprobaciones del pivotado de embalses
 
 web/                       Vite + React + Leaflet
   src/alertEngine.ts         ⭐ cálculo de alertas EN EL NAVEGADOR
@@ -169,11 +171,23 @@ mapa en calma hace creer que no hay peligro. Por eso:
 
 ### Lo más urgente ahora mismo
 
-**Encontrar dónde publica MITECO el estado de los embalses.** La capa está construida
-y probada; solo falta la fuente. Si trabajas en una confederación hidrográfica, en
-MITECO, o simplemente conoces el portal correcto,
+**Los embalses del Júcar y del Ebro**, que son las cuencas donde caen las DANAs.
+
+Catalunya ya está en tiempo real. MITECO está descartado como agregador nacional
+—lo comprobamos endpoint por endpoint— así que hay que ir cuenca a cuenca. Lo que
+sabemos hasta ahora:
+
+| Cuenca | Estado |
+|---|---|
+| Catalunya (ACA) | ✅ Integrada, en tiempo real |
+| Hidrosur (Andalucía) | 🔜 Localizadas sus capas en GeoJSON: embalses, aforos y pluviómetros. Falta el endpoint de lecturas |
+| Júcar | ⏳ `saih.chj.es` responde, pero no hemos dado con la ruta que sirve los datos |
+| Ebro | ⏳ `saihebro.com` da tiempo de espera agotado desde GitHub Actions |
+
+Si trabajas en una confederación hidrográfica o conoces el portal correcto,
 [cuéntanoslo](../../issues/new?template=03-fuente-datos.yml) — es lo que más falta
-hace.
+hace. Hay un workflow, **Sondear fuentes de datos**, que prueba endpoints candidatos
+y dice qué devuelve cada uno; añadir uno a la lista es cambiar una línea.
 
 También vale el **conocimiento local**: qué barranco de tu pueblo se desborda
 siempre, qué vado se corta con dos gotas. Eso no lo da ningún sensor.
@@ -205,6 +219,7 @@ minutos). La del proyecto es privada y no se comparte.
 | `npm run typecheck` | Comprueba tipos en todo el proyecto |
 | `npm run build` | Construye web y servidor |
 | `npm --prefix server run generar-datos` | Descarga los datos como archivos estáticos |
+| `npm --prefix server run test` | Comprueba el pivotado de embalses sin tocar la red |
 
 > El servicio oficial lo mantenemos nosotros: la infraestructura, la clave de AEMET y
 > el despliegue son del proyecto. No hace falta que nadie monte su propia copia para
@@ -214,7 +229,7 @@ minutos). La del proyecto es privada y no se comparte.
 
 ## Roadmap
 
-- [ ] **Fuente de datos de embalses** (lo más urgente: la capa ya existe)
+- [ ] **Embalses del Júcar y del Ebro** (lo más urgente: Catalunya ya va en tiempo real)
 - [ ] Nivel y caudal de los ríos del SAIH, resolviendo el certificado TLS
 - [ ] Meter el caudal de los ríos en el motor de alertas: es la señal más fiable de
       riada real, mejor que solo mirar la lluvia

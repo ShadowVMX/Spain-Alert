@@ -17,6 +17,10 @@
 
 const TIMEOUT_MS = 25_000;
 
+/** Tope de texto a escanear en busca de rutas. Un visor puede pesar megas y no hace
+ *  falta leerlo entero: las llamadas a datos aparecen en la cabecera del documento. */
+const MAX_TEXTO_ESCANEADO = 300_000;
+
 interface Candidato {
   grupo: string;
   id: string;
@@ -182,9 +186,15 @@ function resumirTexto(texto: string, tipo: string): string[] {
     return lineas;
   }
 
-  const rutas = [...texto.matchAll(/["'`(]([\w./?=&:-]*(?:json|glayer|ajax|api|datos|rest|service)[\w./?=&:-]*)["'`)]/gi)]
+  // El regex solo trocea cadenas entrecomilladas y el filtrado por palabra clave se
+  // hace después en JavaScript. La versión anterior metía la alternancia dentro del
+  // patrón, entre dos cuantificadores, que es la forma de acabar con backtracking
+  // catastrófico ante la entrada equivocada. Aquí no llegó a dispararse, pero un
+  // visor puede pesar megas y no compensa dejar la mina puesta.
+  const PALABRAS = ["json", "glayer", "ajax", "api", "datos", "rest", "service", "geojson"];
+  const rutas = [...texto.slice(0, MAX_TEXTO_ESCANEADO).matchAll(/["'`(]([^"'`()\s]{8,140})["'`)]/g)]
     .map((m) => m[1])
-    .filter((u) => u.length > 8 && u.length < 140);
+    .filter((u) => PALABRAS.some((pal) => u.toLowerCase().includes(pal)));
   const unicas = [...new Set(rutas)].slice(0, 20);
   if (unicas.length > 0) {
     lineas.push("  rutas internas que huelen a datos:");

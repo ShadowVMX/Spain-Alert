@@ -60,6 +60,13 @@ jobs:
           # Solo la longitud: el valor no se imprime nunca.
           echo "✅ Clave encontrada (${#CLAVE} caracteres)."
 
+      # Solo en push y en ejecuciones a mano. En las programadas NO: si una
+      # comprobación fallara, el cron dejaría de publicar datos de lluvia, y quedarse
+      # sin avisos es peor que arrastrar un fallo de lógica en una capa secundaria.
+      - name: Comprobaciones
+        if: github.event_name != 'schedule'
+        run: npm --prefix server run test
+
       - name: Descargar datos de AEMET, EMSC y SAIH
         env:
           AEMET_API_KEY: ${{ secrets.AEMET_API_KEY || secrets.AEMET_KEY || vars.AEMET_API_KEY || vars.AEMET_KEY }}
