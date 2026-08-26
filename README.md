@@ -97,7 +97,7 @@ en ese momento ya no llueva fuerte.
 
 | Qué | Estado real |
 |---|---|
-| **Avisos AEMET (CAP)** | El código está integrado y responde, pero desde que la app existe **no ha habido ningún aviso activo en España**, así que el parseo del formato oficial todavía no se ha visto funcionar con un aviso de verdad. |
+| **Avisos AEMET (CAP)** | Integrado y **verificado contra avisos reales guardados**, sin esperar a que haya una DANA. 10 comprobaciones cubren nivel oficial, fenómeno, polígonos, caducidad y XML corrupto. Lo que sigue sin poder comprobarse en vivo es la descarga, porque no ha habido ningún aviso activo en España desde que existe la app. |
 | **Embalses fuera de Catalunya** | Catalunya ya va en tiempo real. Faltan las cuencas donde caen las DANAs. **MITECO queda descartado**: ni su API de objetos geográficos ni su directorio ArcGIS (`ElevationsService`, `PrintService`, `SharedService`) publican el agua, y su WMS tiene la cadena TLS incompleta. La vía buena es cuenca a cuenca. |
 | **Ríos y caudales (SAIH)** | `wms.mapama.gob.es` responde con `UNABLE_TO_VERIFY_LEAF_SIGNATURE`: le falta el certificado intermedio en la cadena TLS. Los navegadores lo resuelven solos buscándolo; Node no. |
 | **Notificaciones con la app cerrada** | Necesita un servidor con Push API y claves VAPID. Hoy el aviso solo salta con la pestaña abierta. |
