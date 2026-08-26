@@ -30,6 +30,21 @@ const TORRENTIAL_MM_H = 60;
 const FLASH_FLOOD_RADIUS_KM = 12;
 const SATURATED_GROUND_3H_MM = 60;
 
+// Lluvia sostenida: la que no da picos llamativos pero empapa el terreno durante
+// horas. Es el patrón de la DANA de octubre del 24 en Valencia, y el que se
+// escapaba mirando solo 1 h y 3 h: doce horas a 15 mm/h son 180 mm, y ninguna de
+// esas horas llega ni al umbral más bajo.
+//
+// Cuando el suelo ya no absorbe, todo lo que cae va a ramblas y calles, así que a
+// partir de cierto acumulado el riesgo existe aunque en este momento apenas
+// llovizne. Los umbrales siguen el orden de magnitud de los avisos de AEMET por
+// precipitación acumulada, que son por zonas y varían: aquí se usan valores
+// conservadores y comunes a todo el país, y por eso la alerta se marca como no
+// oficial.
+const SOSTENIDA_6H_MM = 80;
+const SOSTENIDA_24H_MM = 150;
+const SATURADO_24H_MM = 100;
+
 const UNA_HORA_MS = 60 * 60 * 1000;
 
 // Para poder comparar gravedades entre sí.
@@ -121,9 +136,13 @@ export function calcularAlertasCercanas(lat: number, lon: number, datos: Datos):
     const mm3h = (x: (typeof cercanas)[number]) => x.f.properties.lluvia3h_mm ?? 0;
     const peorPor = (l: typeof cercanas, v: (x: (typeof cercanas)[number]) => number) => l.reduce((a, b) => (v(a) > v(b) ? a : b));
 
+    const mm6h = (x: (typeof cercanas)[number]) => x.f.properties.lluvia6h_mm ?? 0;
+    const mm24h = (x: (typeof cercanas)[number]) => x.f.properties.lluvia24h_mm ?? 0;
+
     const torrencial = cercanas.filter((x) => mm1h(x) >= TORRENTIAL_MM_H);
     const muyFuerte = cercanas.filter((x) => mm1h(x) >= FLASH_FLOOD_MM_H);
-    const terrenoSaturado = cercanas.filter((x) => mm3h(x) >= SATURATED_GROUND_3H_MM);
+    const sostenida = cercanas.filter((x) => mm6h(x) >= SOSTENIDA_6H_MM || mm24h(x) >= SOSTENIDA_24H_MM);
+    const terrenoSaturado = cercanas.filter((x) => mm3h(x) >= SATURATED_GROUND_3H_MM || mm24h(x) >= SATURADO_24H_MM);
 
     let propia: NearbyAlert | null = null;
 
@@ -148,12 +167,28 @@ export function calcularAlertasCercanas(lat: number, lon: number, datos: Datos):
         instrucciones: SAFETY_INSTRUCTIONS.avenidas,
         fuente: "AEMET (estación automática, aviso no oficial)",
       };
+    } else if (sostenida.length > 0) {
+      const peor = peorPor(sostenida, mm24h);
+      const h24 = peor.f.properties.lluvia24h_mm;
+      const h6 = peor.f.properties.lluvia6h_mm;
+      propia = {
+        tipo: "avenidas",
+        severidad: "naranja",
+        titulo:
+          `Lluvia persistente cerca de ti: ${h24 ?? h6} mm acumulados en ${h24 ? "24 h" : "6 h"} en ${peor.f.properties.nombre}. ` +
+          `No hace falta un chaparrón fuerte ahora: el terreno lleva horas empapándose y ya no absorbe, así que lo que caiga va a ramblas y calles`,
+        distancia_km: Math.round(peor.d),
+        instrucciones: SAFETY_INSTRUCTIONS.avenidas,
+        fuente: "AEMET (estación automática, aviso no oficial)",
+      };
     } else if (terrenoSaturado.length > 0) {
-      const peor = peorPor(terrenoSaturado, mm3h);
+      const peor = peorPor(terrenoSaturado, (x) => Math.max(mm3h(x), mm24h(x)));
       propia = {
         tipo: "avenidas",
         severidad: "amarillo",
-        titulo: `Terreno saturado por lluvia acumulada cerca de ti (${peor.f.properties.lluvia3h_mm} mm en 3h en ${peor.f.properties.nombre}): ríos y ramblas pueden seguir subiendo aunque ahora no llueva tan fuerte`,
+        titulo:
+          `Terreno saturado por lluvia acumulada cerca de ti (${mm3h(peor) >= SATURATED_GROUND_3H_MM ? `${peor.f.properties.lluvia3h_mm} mm en 3 h` : `${peor.f.properties.lluvia24h_mm} mm en 24 h`} ` +
+          `en ${peor.f.properties.nombre}): ríos y ramblas pueden seguir subiendo aunque ahora no llueva tan fuerte`,
         distancia_km: Math.round(peor.d),
         instrucciones: SAFETY_INSTRUCTIONS.avenidas,
         fuente: "AEMET (estación automática, aviso no oficial)",
