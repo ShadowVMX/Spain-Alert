@@ -1,8 +1,9 @@
 import "dotenv/config";
 import fs from "node:fs/promises";
 import path from "node:path";
-import { AemetAuthError, caducidadDeLaClave, getActiveWarnings, getWeatherStations } from "../lib/aemet.js";
+import { AemetAuthError, caducidadDeLaClave, getActiveWarnings, getWeatherStations, getMaestroMunicipios, descargarPredicciones} from "../lib/aemet.js";
 import { getRecentEarthquakes } from "../lib/earthquakes.js";
+import { ordenarPorPrioridad } from "../lib/prediccion.js";
 import { getSaihLayerName, SAIH_LAYERS } from "../lib/saih.js";
 import { EmbalsesError, getEmbalses } from "../lib/embalses.js";
 import type { SaihCapa } from "../lib/saih.js";
@@ -59,6 +60,14 @@ async function alResumen(lineas: string[]): Promise<void> {
     await fs.writeFile(path.join(process.env.RUNNER_TEMP ?? "/tmp", "diagnostico.txt"), texto, "utf-8");
   } catch {
     // Ídem: si no se puede escribir, no pasa nada.
+  }
+}
+
+async function leerJson<T>(nombre: string): Promise<T | null> {
+  try {
+    return JSON.parse(await fs.readFile(path.join(outDir, nombre), "utf-8")) as T;
+  } catch {
+    return null; // si no se puede releer, la cola simplemente rota sin prioridad
   }
 }
 
@@ -179,6 +188,16 @@ function comprobarCaducidadClave(): void {
   }
 }
 
+/**
+ * Cuántos municipios se piden por pasada y cada cuánto.
+ *
+ * Con dos peticiones por municipio y un límite de ~20 por minuto, seis segundos es
+ * el ritmo que no provoca 429. Cuarenta municipios son unos cuatro minutos, que
+ * cabe de sobra en el cron de diez.
+ */
+const CUPO_PREDICCION = 40;
+const PAUSA_PREDICCION_MS = 6000;
+
 async function main() {
   await fs.mkdir(outDir, { recursive: true });
   console.log(`Generando datos en ${outDir}`);
@@ -192,12 +211,57 @@ async function main() {
     generarEmbalses(),
   ]);
 
+  // --- Predicción por municipio -------------------------------------------
+  //
+  // AEMET corta a ~20 peticiones por minuto y son 8.100 municipios, así que no se
+  // puede refrescar el país entero: un ciclo completo son 13 horas. En vez de
+  // repartir el límite a partes iguales, se gasta donde está el tiempo. Los
+  // municipios bajo aviso oficial, o con una estación midiendo lluvia fuerte al
+  // lado, van primero; el resto rota de fondo.
+  //
+  // Por eso este bloque va DESPUÉS de avisos y estaciones: son justamente lo que
+  // decide el orden de la cola.
+  let prediccionOk = false;
+  try {
+    const municipios = await getMaestroMunicipios();
+    // Se releen del disco en vez de volver a descargarlos: acaban de escribirse
+    // ahí mismo y una descarga de más gasta cuota que hace falta para la cola.
+    const cola = ordenarPorPrioridad(municipios, CUPO_PREDICCION, {
+      avisos: avisos.ok ? await leerJson("avisos.json") : null,
+      estaciones: estaciones.ok ? await leerJson("estaciones.json") : null,
+    });
+
+    const { predicciones, cortadoPorLimite } = await descargarPredicciones(cola, {
+      cupo: CUPO_PREDICCION,
+      pausaMs: PAUSA_PREDICCION_MS,
+    });
+
+    await escribir("prediccion.json", {
+      municipios: predicciones,
+      // Se publica el total para que la web pueda decir con honestidad que la
+      // predicción de un sitio puede no estar todavía, en vez de callarse.
+      totalMunicipios: municipios.length,
+      cubiertos: predicciones.length,
+      cortadoPorLimite,
+      actualizado: new Date().toISOString(),
+    });
+    prediccionOk = predicciones.length > 0;
+    console.log(`   ↳ predicción de ${predicciones.length} municipios${cortadoPorLimite ? " (cortado por el límite de AEMET)" : ""}`);
+  } catch (err) {
+    console.error(`   ↳ predicción: ${(err as Error).message}`);
+    await escribir("prediccion.json", {
+      municipios: [], totalMunicipios: 0, cubiertos: 0, cortadoPorLimite: false,
+      actualizado: new Date().toISOString(), error: (err as Error).message,
+    });
+  }
+
   await escribir("meta.json", {
     actualizado: new Date().toISOString(),
     fuentes: {
       avisos: avisos.ok,
       estaciones: estaciones.ok,
       terremotos: terremotos.ok,
+      prediccion: prediccionOk,
       saih: saih.ok,
       embalses: embalses.ok,
     },
