@@ -3,6 +3,7 @@ import { extract } from "tar-stream";
 import { XMLParser } from "fast-xml-parser";
 import type { GeoFeature, GeoFeatureCollection, HazardKind, Severity, WeatherStationProperties } from "./types.js";
 import { classifyRain, classifyTrend } from "./rain.js";
+import { parsearMaestro, parsearPrediccion, type Municipio, type PrediccionMunicipio } from "./prediccion.js";
 
 const AEMET_BASE = "https://opendata.aemet.es/opendata/api";
 
@@ -446,4 +447,67 @@ export function parsearAvisosCap(xmlFiles: string[]): GeoFeature<import("./types
   }
 
   return features;
+}
+
+
+// --- Predicción por municipio ---------------------------------------------------
+
+/**
+ * AEMET sirve estos ficheros en ISO-8859-15, no en UTF-8. Decodificarlos como UTF-8
+ * deja los nombres con acento hechos un cristo ("Cádiz"), y son nombres que el
+ * usuario lee. Se prueba UTF-8 y, si aparece el carácter de sustitución, se rehace
+ * en latin1.
+ */
+function decodificar(raw: Buffer): string {
+  const utf8 = raw.toString("utf-8");
+  return utf8.includes("\uFFFD") ? raw.toString("latin1") : utf8;
+}
+
+export async function getMaestroMunicipios(): Promise<Municipio[]> {
+  const { raw } = await fetchAemet("/maestro/municipios");
+  return parsearMaestro(JSON.parse(decodificar(raw)));
+}
+
+/** Cuántos municipios se piden en cada pasada, y cada cuánto. */
+export interface RitmoPrediccion {
+  cupo: number;
+  pausaMs: number;
+}
+
+export interface ResultadoPredicciones {
+  predicciones: PrediccionMunicipio[];
+  /** Se cortó por el límite de AEMET en vez de por haber terminado. */
+  cortadoPorLimite: boolean;
+}
+
+/**
+ * Descarga las predicciones de una lista ya ordenada por prioridad.
+ *
+ * AEMET corta a unas 20 peticiones por minuto y cada municipio gasta dos (la que
+ * pide y la que descarga). De ahí la pausa: ir más rápido no consigue más datos,
+ * solo consigue 429. Y al segundo 429 se para: seguir insistiendo no traería nada
+ * y arriesga a que nos corten también el resto de descargas de la app.
+ */
+export async function descargarPredicciones(municipios: Municipio[], ritmo: RitmoPrediccion): Promise<ResultadoPredicciones> {
+  const predicciones: PrediccionMunicipio[] = [];
+  let limites = 0;
+
+  for (const m of municipios.slice(0, ritmo.cupo)) {
+    try {
+      const { raw } = await fetchAemet(`/prediccion/especifica/municipio/horaria/${m.id}`);
+      const p = parsearPrediccion(JSON.parse(decodificar(raw)));
+      if (p) predicciones.push(p);
+    } catch (err) {
+      if (String((err as Error).message).includes("429")) {
+        limites++;
+        if (limites >= 2) return { predicciones, cortadoPorLimite: true };
+        await new Promise((r) => setTimeout(r, 60_000)); // el propio aviso dice "vuelva el próximo minuto"
+        continue;
+      }
+      // Un municipio que falla por otra cosa no puede llevarse por delante al resto.
+    }
+    await new Promise((r) => setTimeout(r, ritmo.pausaMs));
+  }
+
+  return { predicciones, cortadoPorLimite: false };
 }
