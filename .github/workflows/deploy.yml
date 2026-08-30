@@ -13,7 +13,12 @@ on:
     - cron: "*/10 * * * *"
   push:
     branches: [main]
-  workflow_dispatch: # permite lanzarlo a mano desde la pestaña Actions
+  workflow_dispatch:
+    inputs:
+      encadenado:
+        description: "Mantener la cadena de refresco (relanzarse solo cada 10 min)"
+        type: boolean
+        default: false
 
 permissions:
   contents: read
@@ -28,10 +33,20 @@ concurrency:
 jobs:
   publicar:
     runs-on: ubuntu-latest
+    # El eslabón de la cadena espera hasta completar los 10 minutos, así que el job
+    # dura eso más lo que tarde en publicar. El tope evita que un job colgado se
+    # quede ocupando un runner para siempre.
+    timeout-minutes: 25
     environment:
       name: github-pages
       url: ${{ steps.deployment.outputs.page_url }}
     steps:
+      # Se apunta el arranque para poder espaciar el siguiente eslabón exactamente
+      # 10 minutos desde AQUÍ, y no 10 minutos desde que termine: si no, cada vuelta
+      # se iría retrasando lo que tarde el propio despliegue.
+      - name: Marcar el arranque
+        run: echo "INICIO=$(date +%s)" >> "$GITHUB_ENV"
+
       - uses: actions/checkout@v4
 
       - uses: actions/setup-node@v4
@@ -93,3 +108,55 @@ jobs:
       - name: Estado de las fuentes de datos
         if: always()
         run: cat "$RUNNER_TEMP/diagnostico.txt" 2>/dev/null || echo "(sin diagnóstico)"
+
+      # --- La cadena de refresco ------------------------------------------------
+      #
+      # GitHub trata las ejecuciones programadas como "cuando pueda": con el cron
+      # puesto cada 10 minutos, en un día real solo se lanzaron 6 veces. Para una
+      # app que dice "tiempo real" eso no vale, y el aviso de datos viejos acababa
+      # encendido casi siempre, que es la forma más rápida de que nadie lo mire.
+      #
+      # Así que el workflow se relanza a sí mismo. El disparo manual (dispatch) sí
+      # se respeta siempre, y el token vive como secret del repositorio: cifrado,
+      # invisible incluso para su dueño una vez guardado, y enmascarado en los logs.
+      # No hace falta confiárselo a ningún servicio de terceros.
+      #
+      # Solo encadenan los runs que ya venían encadenados. Si encadenara cualquiera,
+      # cada ejecución programada abriría una cadena nueva y se multiplicarían.
+      #
+      # Y se ejecuta SIEMPRE, aunque el despliegue haya fallado: si la cadena se
+      # cortara con cada fallo puntual de AEMET, se moriría el primer día malo.
+      - name: Mantener la cadena de refresco
+        if: ${{ always() && github.event_name == 'workflow_dispatch' && inputs.encadenado }}
+        env:
+          TOKEN: ${{ secrets.TOKEN_REFRESCO }}
+        run: |
+          if [ -z "$TOKEN" ]; then
+            echo "::error::Falta el secret TOKEN_REFRESCO. Sin él la cadena se corta aquí."
+            echo "Créalo en Settings > Secrets and variables > Actions con un fine-grained"
+            echo "token que tenga permiso 'Actions: Read and write' sobre este repositorio."
+            exit 1
+          fi
+
+          RESTA=$(( 600 - ($(date +%s) - INICIO) ))
+          if [ "$RESTA" -gt 0 ]; then
+            echo "Esperando ${RESTA}s para completar los 10 minutos desde el arranque."
+            sleep "$RESTA"
+          fi
+
+          CODIGO=$(curl -sS -o /dev/null -w "%{http_code}" -X POST \
+            -H "Accept: application/vnd.github+json" \
+            -H "Authorization: Bearer $TOKEN" \
+            -H "X-GitHub-Api-Version: 2022-11-28" \
+            "https://api.github.com/repos/${GITHUB_REPOSITORY}/actions/workflows/deploy.yml/dispatches" \
+            -d '{"ref":"main","inputs":{"encadenado":"true"}}')
+
+          # 204 es la respuesta buena: aceptado y sin cuerpo.
+          if [ "$CODIGO" = "204" ]; then
+            echo "Siguiente eslabón lanzado."
+          else
+            echo "::error::No se pudo lanzar el siguiente eslabón (HTTP $CODIGO). La cadena queda cortada."
+            echo "Un 404 suele ser el permiso de Actions mal puesto: GitHub responde 404 en vez de 403."
+            echo "Mientras tanto, el cron programado sigue actualizando cada pocas horas."
+            exit 1
+          fi

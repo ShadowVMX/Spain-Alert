@@ -141,6 +141,44 @@ web/                       Vite + React + Leaflet
 .github/workflows/         descarga datos y publica en Pages
 ```
 
+### Cada cuánto se actualiza, y por qué hace falta una cadena
+
+El workflow pide ejecutarse cada 10 minutos, pero **GitHub trata las ejecuciones
+programadas como "cuando pueda"**: en un día real solo se lanzaron 6 de las 144
+pedidas, con huecos de hasta tres horas. Para una app que dice "tiempo real" eso no
+sirve, y el aviso de datos desactualizados acababa encendido casi siempre — que es
+la forma más rápida de conseguir que nadie lo mire.
+
+Los disparos manuales (`workflow_dispatch`), en cambio, se respetan siempre. Así que
+**el workflow se relanza a sí mismo**: al terminar espera hasta completar los 10
+minutos desde que arrancó y lanza el siguiente eslabón.
+
+Para que funcione hace falta un secret llamado **`TOKEN_REFRESCO`**:
+
+1. GitHub → tu perfil → Settings → Developer settings → Personal access tokens →
+   **Fine-grained tokens** → Generate new token.
+2. *Repository access*: **Only select repositories** → este repositorio.
+3. *Permissions → Repository*: **Actions: Read and write**. Nada más.
+4. Copia el token (no se vuelve a ver) y guárdalo en el repositorio:
+   Settings → Secrets and variables → Actions → **New repository secret**,
+   con el nombre `TOKEN_REFRESCO`.
+
+Para **arrancar la cadena**, una vez: pestaña Actions → *Publicar en GitHub Pages* →
+Run workflow → marca la casilla **"Mantener la cadena de refresco"** → Run.
+
+Cosas que conviene saber:
+
+- **Solo encadenan los runs que ya venían encadenados.** Si encadenara cualquiera,
+  cada ejecución programada abriría una cadena nueva y se multiplicarían.
+- **La cadena sigue aunque el despliegue falle.** Si se cortara con cada fallo
+  puntual de AEMET, se moriría el primer día malo.
+- **El cron programado se queda como red de seguridad.** Si la cadena muere —el
+  token caduca, un job se cuelga—, la app sigue actualizándose cada pocas horas en
+  vez de quedarse congelada. Si ves el aviso de datos viejos de forma persistente,
+  lo primero que hay que mirar es si la cadena sigue viva.
+- **El token caduca.** Cuando lo haga, la cadena se para y el paso final del
+  workflow lo dirá en rojo con el motivo.
+
 ### Cómo falla (a propósito)
 
 En una app de avisos, **unos datos viejos son más peligrosos que no tener datos**: un
